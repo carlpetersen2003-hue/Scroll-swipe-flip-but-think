@@ -30,10 +30,40 @@
 
   /* ---------- HEADER ---------- */
   header.top {
-    flex: 0 0 auto; display: flex; align-items: center; gap: 16px;
-    padding: 12px 22px; background: #131316; border-bottom: 1px solid var(--line);
-    z-index: 20;
+    flex: 0 0 auto; position: relative;
+    background: #131316; border-bottom: 1px solid var(--line);
+    z-index: 20; transition: padding .28s ease, background .28s ease;
+    padding: 12px 22px;
   }
+  .bar-full { display: flex; align-items: center; gap: 16px; overflow: hidden;
+    padding-right: 38px;
+    max-height: 64px; opacity: 1; transition: max-height .28s ease, opacity .2s ease; }
+  .bar-mini { display: none; justify-content: center; }
+  .mini-mag {
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    padding: 6px 18px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 700;
+    transition: all .15s ease;
+  }
+  .mini-mag:hover { border-color: #3a3a44; }
+  .mini-mag.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .mini-mag .count { margin-left: 6px; opacity: .85; font-weight: 700; }
+
+  .bar-toggle {
+    position: absolute; top: 8px; right: 12px; z-index: 25;
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 14px; transition: all .15s ease;
+  }
+  .bar-toggle:hover { color: var(--text); border-color: #3a3a44; }
+  .bar-toggle .chv { transition: transform .28s ease; display: inline-block; }
+
+  /* collapsed state */
+  header.top.collapsed { padding: 7px 22px; background: rgba(19,19,22,.92); backdrop-filter: blur(8px); }
+  header.top.collapsed .bar-full { max-height: 0; opacity: 0; }
+  header.top.collapsed .bar-mini { display: flex; }
+  header.top.collapsed .bar-toggle .chv { transform: rotate(180deg); }
+
   .brand { display: flex; align-items: baseline; gap: 10px; font-family: Georgia, "Times New Roman", serif; }
   .brand .mark {
     width: 26px; height: 26px; border-radius: 6px; background: var(--accent);
@@ -102,6 +132,16 @@
   }
   .page.noimg .page-inner { bottom: auto; top: 50%; transform: translateY(-50%); }
 
+  /* scrim derrière le texte pour la lisibilité sur images claires */
+  .page-textwrap {
+    display: inline-block; max-width: min(780px, 92%);
+    background: rgba(8, 8, 11, 0.40);
+    -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 18px; padding: 18px 24px 20px; margin-bottom: 18px;
+  }
+  .page.noimg .page-textwrap { background: rgba(8, 8, 11, 0.22); border-color: transparent; }
+
   .src-chip {
     display: inline-flex; align-items: center; gap: 7px;
     background: rgba(0,0,0,.5); backdrop-filter: blur(6px);
@@ -112,16 +152,14 @@
   .page-title {
     font-family: Georgia, "Times New Roman", serif;
     font-size: clamp(28px, 4.6vw, 56px); line-height: 1.08; letter-spacing: -0.6px;
-    margin: 0 0 16px; max-width: 18ch;
-    text-shadow: 0 2px 30px rgba(0,0,0,.5);
+    margin: 0 0 14px; max-width: 18ch;
   }
   .page-excerpt {
     font-size: clamp(15px, 1.5vw, 19px); line-height: 1.55; color: #e4e4e7;
-    max-width: 60ch; margin: 0 0 22px;
+    max-width: 60ch; margin: 0 0 12px;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-    text-shadow: 0 1px 20px rgba(0,0,0,.5);
   }
-  .page-meta { color: #c7c7cc; font-size: 13.5px; margin-bottom: 22px; display:flex; gap:8px; align-items:center; }
+  .page-meta { color: #c7c7cc; font-size: 13.5px; margin-bottom: 0; display:flex; gap:8px; align-items:center; }
   .page-meta .dot { width:3px; height:3px; border-radius:50%; background:#9a9aa2; }
   .page-actions { display: flex; gap: 12px; flex-wrap: wrap; }
   .pbtn {
@@ -223,7 +261,7 @@
   .btn.gold { background: var(--gold); border-color: var(--gold); color: #1a1a1a; }
   .article-body p { font-family: Georgia, "Times New Roman", serif; font-size: 17.5px; line-height: 1.75; color: #d4d4d8; margin: 0 0 18px; }
   .article-body .lead { font-size: 19px; color: #e8e8ea; }
-  .summary-box { margin-top: 8px; background: var(--accent-soft); border: 1px solid rgba(225,40,40,.3); border-radius: 14px; padding: 20px 22px; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
+  .summary-box { margin: 0 0 28px; background: var(--accent-soft); border: 1px solid rgba(225,40,40,.3); border-radius: 14px; padding: 20px 22px; white-space: pre-wrap; line-height: 1.6; font-size: 15px; }
   .summary-box .s-head { font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .6px; font-size: 12.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
   .gold .spinner, .btn .spinner { border-top-color: currentColor; }
@@ -245,18 +283,24 @@
 </head>
 <body>
 <div id="app">
-  <header class="top">
-    <div class="brand">
-      <span class="mark">F</span>
-      <h1>Le Magazine</h1>
-      <span class="sub">agrégateur d'idées & de géopolitique</span>
+  <header class="top" id="topbar">
+    <div class="bar-full">
+      <div class="brand">
+        <span class="mark">F</span>
+        <h1>Le Magazine</h1>
+        <span class="sub">agrégateur d'idées & de géopolitique</span>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-view="discover" id="tabDiscover">Découvrir</button>
+        <button class="tab" data-view="saved" id="tabSaved">🔖 Mon Magazine<span class="count" id="savedCount">0</span></button>
+      </div>
+      <div class="spacer"></div>
+      <div class="hint" id="hint"></div>
     </div>
-    <div class="tabs">
-      <button class="tab active" data-view="discover" id="tabDiscover">Découvrir</button>
-      <button class="tab" data-view="saved" id="tabSaved">🔖 Mon Magazine<span class="count" id="savedCount">0</span></button>
+    <div class="bar-mini">
+      <button class="mini-mag" id="miniMag">🔖 Mon Magazine<span class="count" id="savedCountMini">0</span></button>
     </div>
-    <div class="spacer"></div>
-    <div class="hint" id="hint"></div>
+    <button class="bar-toggle" id="barToggle" title="Réduire / agrandir la barre"><span class="chv">⌃</span></button>
   </header>
 
   <div class="stage">
@@ -280,8 +324,8 @@
         <h1 id="readerTitle"></h1>
         <div class="reader-meta" id="readerMeta"></div>
         <div class="reader-actions" id="readerActions"></div>
-        <div class="article-body" id="readerBody"></div>
         <div id="summaryWrap"></div>
+        <div class="article-body" id="readerBody"></div>
       </div>
     </div>
   </div>
@@ -308,9 +352,9 @@
 
   // ---------- State ----------
   var S = {
-    articles: [], index: {}, enrich: { text: {}, summary: {} }, notebooklm: "https://notebooklm.com",
+    articles: [], index: {}, enrich: { text: {}, summary: {} }, notebooklm: "https://notebooklm.google.com",
     view: "discover", current: 0, pageEls: [], saved: loadSaved(), initialized: false,
-    openId: null, pending: {},
+    openId: null, pending: {}, collapsed: false, manualBar: false,
   };
 
   var SRC_GRAD = {
@@ -336,6 +380,7 @@
   function updateSavedCount() {
     var n = S.saved.filter(function (id) { return S.index[id]; }).length;
     document.getElementById("savedCount").textContent = n;
+    document.getElementById("savedCountMini").textContent = n;
   }
 
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -351,6 +396,28 @@
   var pager = document.getElementById("pager");
   var savedWrap = document.getElementById("savedWrap");
   var grid = document.getElementById("grid");
+  var topbar = document.getElementById("topbar");
+
+  // ---------- Collapsible top bar ----------
+  function setCollapsed(c) {
+    if (S.collapsed === c) return;
+    S.collapsed = c;
+    topbar.classList.toggle("collapsed", c);
+  }
+  document.getElementById("barToggle").addEventListener("click", function () {
+    S.manualBar = true;
+    setCollapsed(!S.collapsed);
+  });
+  document.getElementById("miniMag").addEventListener("click", function () {
+    setView(S.view === "saved" ? "discover" : "saved");
+  });
+  function refreshMiniMag() {
+    document.getElementById("miniMag").classList.toggle("active", S.view === "saved");
+  }
+  function onContentScroll(top) {
+    if (top <= 4) { S.manualBar = false; setCollapsed(false); }
+    else if (!S.manualBar) { setCollapsed(true); }
+  }
 
   // ---------- Hint per device ----------
   var IS_TOUCH = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
@@ -398,11 +465,13 @@
         '<div class="page-shade"></div>' +
         '<div class="page-inner">' +
           '<span class="src-chip">' + esc(a.emoji) + " " + esc(a.source) + "</span>" +
-          '<h2 class="page-title">' + esc(a.title) + "</h2>" +
-          (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
-          '<div class="page-meta">' +
-            (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
-            "<span>" + esc(a.date || "") + "</span>" +
+          '<div class="page-textwrap">' +
+            '<h2 class="page-title">' + esc(a.title) + "</h2>" +
+            (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
+            '<div class="page-meta">' +
+              (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
+              "<span>" + esc(a.date || "") + "</span>" +
+            "</div>" +
           "</div>" +
           '<div class="page-actions">' +
             '<button class="pbtn read" data-act="read">📖 Lire l\'article</button>' +
@@ -527,7 +596,9 @@
   pager.addEventListener("scroll", function () {
     var i = Math.round(pager.scrollTop / pager.clientHeight);
     if (i !== S.current) { S.current = i; loadAround(i); }
+    onContentScroll(pager.scrollTop);
   });
+  savedWrap.addEventListener("scroll", function () { onContentScroll(savedWrap.scrollTop); });
 
   // ---------- SAVED GRID ----------
   var imgObserver = new IntersectionObserver(function (entries) {
@@ -601,6 +672,7 @@
     document.getElementById("tabSaved").classList.toggle("active", v === "saved");
     pager.style.display = v === "discover" ? "" : "none";
     savedWrap.style.display = v === "saved" ? "block" : "none";
+    refreshMiniMag();
     if (v === "saved") buildSavedGrid();
     else { pager.focus(); }
   }
@@ -727,7 +799,7 @@
     } catch (e) { return false; }
   }
   function openNotebookLM() {
-    var url = S.notebooklm || "https://notebooklm.com";
+    var url = S.notebooklm || "https://notebooklm.google.com";
     // window.open must be called synchronously inside the click gesture, else it is blocked.
     var w = window.open(url, "_blank");
     if (w) { try { w.opener = null; } catch (e) {} return; }
