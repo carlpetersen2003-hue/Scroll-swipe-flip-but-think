@@ -211,6 +211,16 @@
     position: absolute; top: 50%; left: 24px; transform: translateY(-50%) scale(.8);
     color: var(--gold); font-size: 28px; opacity: 0; z-index: 4; pointer-events: none;
   }
+  .swipe-track.del {
+    left: auto; right: 0;
+    background: linear-gradient(270deg, rgba(225,40,40,.0), rgba(225,40,40,.26));
+  }
+  .swipe-hintic.del {
+    left: auto; right: 24px; color: #ff7a7a;
+    width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(225,40,40,.22); border: 1px solid rgba(225,40,40,.5);
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+  }
 
   /* ---------- SAVED GRID ---------- */
   .saved-wrap { position: absolute; inset: 0; overflow-y: auto; padding: 22px; display: none; }
@@ -352,10 +362,15 @@
   }
 
   // ---------- State ----------
+  // Clés localStorage : déclarées AVANT l'objet S, car S.saved/S.dismissed
+  // appellent load*() dès l'initialisation (les var hoistées ne sont pas encore assignées sinon).
+  var BK = "flip_magazine_bookmarks_v1";
+  var DK = "flip_magazine_dismissed_v1";
+
   var S = {
     articles: [], index: {}, enrich: { text: {}, summary: {} }, notebooklm: "https://notebooklm.google.com",
-    view: "discover", current: 0, pageEls: [], saved: loadSaved(), initialized: false,
-    openId: null, pending: {}, collapsed: false, manualBar: false,
+    view: "discover", current: 0, pageEls: [], feed: [], saved: loadSaved(), dismissed: loadDismissed(),
+    initialized: false, openId: null, pending: {}, collapsed: false, manualBar: false,
   };
 
   var SRC_GRAD = {
@@ -367,7 +382,6 @@
   };
   function gradFor(src) { return SRC_GRAD[src] || "linear-gradient(160deg,#2a2a33,#121216)"; }
 
-  var BK = "flip_magazine_bookmarks_v1";
   function loadSaved() { try { return JSON.parse(localStorage.getItem(BK) || "[]"); } catch (e) { return []; } }
   function persistSaved() { try { localStorage.setItem(BK, JSON.stringify(S.saved)); } catch (e) {} }
   function isSaved(id) { return S.saved.indexOf(id) !== -1; }
@@ -378,6 +392,17 @@
     persistSaved(); updateSavedCount();
   }
   function toggleSaved(id) { var on = !isSaved(id); setSaved(id, on); return on; }
+
+  function loadDismissed() { try { return JSON.parse(localStorage.getItem(DK) || "[]"); } catch (e) { return []; } }
+  function persistDismissed() { try { localStorage.setItem(DK, JSON.stringify(S.dismissed)); } catch (e) {} }
+  function isDismissed(id) { return S.dismissed.indexOf(id) !== -1; }
+  function setDismissed(id, on) {
+    var i = S.dismissed.indexOf(id);
+    if (on && i === -1) S.dismissed.push(id);
+    if (!on && i !== -1) S.dismissed.splice(i, 1);
+    persistDismissed();
+  }
+
   function updateSavedCount() {
     var n = S.saved.filter(function (id) { return S.index[id]; }).length;
     document.getElementById("savedCount").textContent = n;
@@ -424,20 +449,25 @@
   var IS_TOUCH = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
   function setHint() {
     document.getElementById("hint").innerHTML = IS_TOUCH
-      ? "Glissez <b>vers le haut</b> pour l'article suivant · <b>vers la droite</b> pour enregistrer"
-      : "<kbd>↓</kbd> article suivant · <kbd>→</kbd> enregistrer · <kbd>Entrée</kbd> lire";
+      ? "Glissez <b>↑</b> suivant · <b>→</b> enregistrer · <b>←</b> supprimer"
+      : "<kbd>↓</kbd> suivant · <kbd>→</kbd> enregistrer · <kbd>←</kbd> supprimer · <kbd>Entrée</kbd> lire";
   }
 
   // ---------- PAGER ----------
+  function idxOf(page) { return S.pageEls.indexOf(page); }
+
   function buildPager() {
     pager.innerHTML = "";
     S.pageEls = [];
-    if (!S.articles.length) {
-      pager.innerHTML = '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">📭</div><h2>Aucun article</h2><p>Les flux sont momentanément indisponibles.</p></div>';
+    S.feed = S.articles.filter(function (a) { return !isDismissed(a.id); });
+    if (!S.feed.length) {
+      pager.innerHTML = !S.articles.length
+        ? '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">📭</div><h2>Aucun article</h2><p>Les flux sont momentanément indisponibles.</p></div>'
+        : '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">✓</div><h2>Vous êtes à jour</h2><p>Tous les articles ont été parcourus ou supprimés.</p></div>';
       return;
     }
     var frag = document.createDocumentFragment();
-    S.articles.forEach(function (a, i) {
+    S.feed.forEach(function (a, i) {
       frag.appendChild(buildPage(a, i));
     });
     pager.appendChild(frag);
@@ -445,7 +475,7 @@
   }
 
   function buildPage(a, i) {
-    var next = S.articles[i + 1];
+    var next = S.feed[i + 1];
     var page = document.createElement("section");
     page.className = "page" + (a.image ? "" : " noimg");
     page.setAttribute("data-id", a.id);
@@ -457,8 +487,8 @@
       : '<div class="page-media"></div>';
 
     var nextPill = next
-      ? '<div class="next-pill" data-go="' + (i + 1) + '"><span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(next.title) + '</span></div>'
-      : '<div class="next-pill"><span>✓ Vous êtes à jour</span></div>';
+      ? '<div class="next-pill"><span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(next.title) + '</span></div>'
+      : '<div class="next-pill at-end"><span>✓ Vous êtes à jour</span></div>';
 
     page.innerHTML =
       '<div class="page-card">' +
@@ -483,17 +513,19 @@
       "</div>" +
       '<div class="swipe-track"></div>' +
       '<div class="swipe-hintic">★</div>' +
+      '<div class="swipe-track del"></div>' +
+      '<div class="swipe-hintic del">✕</div>' +
       nextPill +
       '<div class="save-flash"><span class="ic">★</span><span class="tx">Enregistré</span></div>';
 
-    wirePage(page, a, i);
+    wirePage(page, a);
     S.pageEls[i] = page;
     return page;
   }
 
   function updatePageSaveBtn(i) {
     var page = S.pageEls[i]; if (!page) return;
-    var a = S.articles[i];
+    var a = S.feed[i]; if (!a) return;
     var btn = page.querySelector('.pbtn.save');
     if (btn) { var on = isSaved(a.id); btn.classList.toggle("on", on); btn.innerHTML = on ? "★ Enregistré" : "🔖 Enregistrer"; }
   }
@@ -505,27 +537,71 @@
   }
 
   function saveArticle(i, viaGesture) {
-    var a = S.articles[i]; if (!a) return;
+    var a = S.feed[i]; if (!a) return;
     if (!isSaved(a.id)) { setSaved(a.id, true); flashSave(i); toast("★ Ajouté à Mon Magazine"); }
     else if (viaGesture) { flashSave(i); toast("Déjà dans Mon Magazine"); }
     updatePageSaveBtn(i);
     syncReaderSaveState(a.id);
   }
 
-  function wirePage(page, a, i) {
+  function updateNextPill(i) {
+    var page = S.pageEls[i]; if (!page) return;
+    var pill = page.querySelector(".next-pill"); if (!pill) return;
+    var next = S.feed[i + 1];
+    if (next) {
+      pill.classList.remove("at-end");
+      pill.innerHTML = '<span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(next.title) + "</span>";
+    } else {
+      pill.classList.add("at-end");
+      pill.innerHTML = "<span>✓ Vous êtes à jour</span>";
+    }
+  }
+
+  // ---- supprimer un article du feed (swipe gauche / flèche gauche) ----
+  function dismissArticle(i) {
+    var a = S.feed[i]; if (!a) return;
+    var page = S.pageEls[i]; if (!page) return;
+    setDismissed(a.id, true);
+    page.style.pointerEvents = "none";
+    var card = page.querySelector(".page-card");
+    card.style.transition = "transform .28s ease, opacity .28s ease";
+    card.style.transform = "translateX(-120%) rotate(-7deg)";
+    card.style.opacity = "0";
+    toast("Article supprimé du feed");
+    setTimeout(function () { removePage(page); }, 250);
+  }
+
+  function removePage(page) {
+    var i = idxOf(page); if (i < 0) return;
+    if (page.parentNode) page.parentNode.removeChild(page);
+    S.pageEls.splice(i, 1);
+    S.feed.splice(i, 1);
+    if (!S.feed.length) { buildPager(); return; }
+    // la page qui précédait pointe désormais vers un nouvel article suivant
+    updateNextPill(i - 1);
+    var ci = Math.max(0, Math.min(S.feed.length - 1, Math.round(pager.scrollTop / pager.clientHeight)));
+    S.current = ci;
+    loadAround(ci);
+  }
+
+  function wirePage(page, a) {
     var card = page.querySelector(".page-card");
     var track = page.querySelector(".swipe-track");
     var hintic = page.querySelector(".swipe-hintic");
+    var trackDel = page.querySelector(".swipe-track.del");
+    var hinticDel = page.querySelector(".swipe-hintic.del");
 
     page.querySelector('[data-act="read"]').addEventListener("click", function (e) { e.stopPropagation(); openReader(a.id); });
     page.querySelector('[data-act="save"]').addEventListener("click", function (e) {
       e.stopPropagation();
       var on = toggleSaved(a.id);
+      var i = idxOf(page);
       if (on) { flashSave(i); toast("★ Ajouté à Mon Magazine"); } else { toast("Retiré de Mon Magazine"); }
       updatePageSaveBtn(i); syncReaderSaveState(a.id);
     });
-    var pill = page.querySelector(".next-pill[data-go]");
-    if (pill) pill.addEventListener("click", function () { goToPage(parseInt(pill.getAttribute("data-go"), 10)); });
+    page.querySelector(".next-pill").addEventListener("click", function () {
+      var i = idxOf(page); if (i + 1 < S.feed.length) goToPage(i + 1);
+    });
 
     // open reader by tapping the title/excerpt (not while dragging)
     page.querySelector(".page-inner").addEventListener("click", function (e) {
@@ -536,8 +612,12 @@
       }
     });
 
-    // ---- horizontal swipe-to-save (touch-action: pan-y lets us own horizontal) ----
+    // ---- horizontal swipe : droite = enregistrer, gauche = supprimer ----
     var sx = 0, sy = 0, drag = false, dir = null;
+    function resetHints() {
+      track.style.width = "0"; hintic.style.opacity = 0;
+      trackDel.style.width = "0"; hinticDel.style.opacity = 0;
+    }
     page.addEventListener("pointerdown", function (e) {
       if (e.target.closest(".pbtn") || e.target.closest(".next-pill")) return;
       sx = e.clientX; sy = e.clientY; drag = true; dir = null; page._moved = false;
@@ -552,23 +632,38 @@
       if (dir === "h") {
         e.preventDefault();
         page._moved = true;
-        var tx = Math.max(0, dx);
         card.style.transition = "none";
-        card.style.transform = "translateX(" + (tx * 0.85) + "px) rotate(" + (tx * 0.012) + "deg)";
-        var prog = Math.min(1, tx / 150);
-        track.style.width = tx + "px";
-        hintic.style.opacity = prog;
-        hintic.style.transform = "translateY(-50%) scale(" + (0.8 + prog * 0.5) + ")";
+        card.style.transform = "translateX(" + (dx * 0.85) + "px) rotate(" + (dx * 0.012) + "deg)";
+        if (dx >= 0) {
+          var prog = Math.min(1, dx / 150);
+          track.style.width = dx + "px"; hintic.style.opacity = prog;
+          hintic.style.transform = "translateY(-50%) scale(" + (0.8 + prog * 0.5) + ")";
+          trackDel.style.width = "0"; hinticDel.style.opacity = 0;
+        } else {
+          var adx = -dx, prog2 = Math.min(1, adx / 150);
+          trackDel.style.width = adx + "px"; hinticDel.style.opacity = prog2;
+          hinticDel.style.transform = "translateY(-50%) scale(" + (0.8 + prog2 * 0.5) + ")";
+          track.style.width = "0"; hintic.style.opacity = 0;
+        }
       }
     });
     function end(e) {
       if (!drag) return; drag = false;
       if (dir === "h") {
         var dx = (e.clientX || sx) - sx;
-        card.style.transition = "transform .3s cubic-bezier(.2,.8,.2,1)";
-        if (dx > 130) { card.style.transform = "translateX(120%) rotate(8deg)"; saveArticle(i, true); setTimeout(function () { card.style.transform = ""; }, 260); }
-        else { card.style.transform = ""; }
-        track.style.width = "0"; hintic.style.opacity = 0;
+        card.style.transition = "transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s ease";
+        if (dx > 130) {
+          card.style.transform = "translateX(120%) rotate(8deg)";
+          saveArticle(idxOf(page), true);
+          setTimeout(function () { card.style.transform = ""; }, 260);
+          resetHints();
+        } else if (dx < -130) {
+          resetHints();
+          dismissArticle(idxOf(page)); // gère sa propre animation + suppression
+        } else {
+          card.style.transform = "";
+          resetHints();
+        }
         setTimeout(function () { page._moved = false; }, 60);
       }
     }
@@ -584,7 +679,7 @@
     var src = img.getAttribute("data-src");
     img.removeAttribute("data-src");
     img.onload = function () { img.classList.add("loaded"); };
-    img.onerror = function () { page.classList.add("noimg"); page.style.setProperty("--grad", gradFor(S.articles[i].source)); var m = page.querySelector(".page-media"); if (m) m.innerHTML = ""; };
+    img.onerror = function () { page.classList.add("noimg"); if (S.feed[i]) page.style.setProperty("--grad", gradFor(S.feed[i].source)); var m = page.querySelector(".page-media"); if (m) m.innerHTML = ""; };
     img.src = src;
   }
   function loadAround(i) { for (var k = i - 1; k <= i + 2; k++) if (k >= 0 && k < S.pageEls.length) loadImg(k); }
@@ -641,7 +736,7 @@
     var img = card.querySelector("img[data-src]"); if (img) imgObserver.observe(img);
     card.querySelector(".scard-rm").addEventListener("click", function (e) {
       e.stopPropagation(); setSaved(a.id, false);
-      var idx = S.articles.findIndex(function (x) { return x.id === a.id; });
+      var idx = S.feed.findIndex(function (x) { return x.id === a.id; });
       if (idx >= 0) updatePageSaveBtn(idx);
       buildSavedGrid();
     });
@@ -686,11 +781,12 @@
       if (e.key === "Escape") closeReader();
       return;
     }
-    if (S.view !== "discover" || !S.articles.length) return;
+    if (S.view !== "discover" || !S.feed.length) return;
     if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); goToPage(S.current + 1); }
     else if (e.key === "ArrowUp" || e.key === "PageUp") { e.preventDefault(); goToPage(S.current - 1); }
     else if (e.key === "ArrowRight") { e.preventDefault(); saveArticle(S.current, true); }
-    else if (e.key === "Enter") { e.preventDefault(); var a = S.articles[S.current]; if (a) openReader(a.id); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); dismissArticle(S.current); }
+    else if (e.key === "Enter") { e.preventDefault(); var a = S.feed[S.current]; if (a) openReader(a.id); }
   });
   pager.addEventListener("pointerdown", function () { try { pager.focus({ preventScroll: true }); } catch (e) {} });
 
@@ -776,7 +872,7 @@
     if (!S.openId) return;
     var on = toggleSaved(S.openId);
     rFlip.classList.toggle("on", on);
-    var idx = S.articles.findIndex(function (x) { return x.id === S.openId; });
+    var idx = S.feed.findIndex(function (x) { return x.id === S.openId; });
     if (idx >= 0) updatePageSaveBtn(idx);
     toast(on ? "★ Ajouté à Mon Magazine" : "Retiré de Mon Magazine");
   });
