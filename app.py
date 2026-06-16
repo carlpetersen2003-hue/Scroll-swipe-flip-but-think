@@ -399,6 +399,16 @@ def html_en_paragraphes(html):
     return paras
 
 
+def _paragraphes_depuis_root(root):
+    """Extrait les paragraphes d'un bloc HTML racine."""
+    paras = []
+    for el in root.find_all(["p", "li", "h2", "h3", "blockquote"]):
+        txt = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
+        if len(txt) > 40:
+            paras.append(txt)
+    return paras
+
+
 def _extraire_paragraphes_web(url):
     """Extraction full-text depuis la page web de l'article."""
     try:
@@ -409,34 +419,40 @@ def _extraire_paragraphes_web(url):
             tag.decompose()
 
         selectors = [
+            ".entry-content.texte",   # SPIP (La Vie des Idées, Diploweb…)
+            ".texte",
             "article .field--name-body",
             "article .node__content",
             ".article-body",
             ".article-content",
             ".post-content",
             "article .entry-content",
-            ".entry-content",
+            "[itemprop=articleBody]",
             "article",
             "main",
             "[role=main]",
+            ".entry-content",
         ]
-        root = None
+        best = []
+        seen_roots = set()
         for sel in selectors:
-            root = soup.select_one(sel)
-            if root:
-                break
-        if not root:
-            root = soup.body or soup
+            for root in soup.select(sel):
+                if id(root) in seen_roots:
+                    continue
+                if "chapo" in (root.get("class") or []):
+                    continue
+                seen_roots.add(id(root))
+                paras = _paragraphes_depuis_root(root)
+                if sum(len(p) for p in paras) > sum(len(p) for p in best):
+                    best = paras
 
+        if best:
+            return best
+
+        root = soup.body or soup
         for tag in root.find_all(["header", "footer", "nav", "aside", "form"]):
             tag.decompose()
-
-        paras = []
-        for el in root.find_all(["p", "li", "h2", "h3", "blockquote"]):
-            txt = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
-            if len(txt) > 40:
-                paras.append(txt)
-        return paras
+        return _paragraphes_depuis_root(root)
     except Exception:
         return []
 
@@ -449,6 +465,9 @@ def obtenir_paragraphes(article):
     html_paras = html_en_paragraphes(fallback_html)
     web_len = sum(len(p) for p in web_paras)
     html_len = sum(len(p) for p in html_paras)
+    # Ne pas laisser un court résumé RSS l'emporter sur un texte web substantiel
+    if web_len >= 600 and html_len < web_len * 1.25:
+        return web_paras
     if html_len > web_len:
         return html_paras
     if web_len >= 400:
