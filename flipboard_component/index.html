@@ -782,7 +782,7 @@
     html += '<button type="button" class="filter-chip' + (!S.filterSource ? " active" : "") + '" data-key="">' +
       '<span class="fc-emoji">🌐</span><span class="fc-body"><div class="fc-name">Tous les médias</div>' +
       '<div class="fc-count">' + total + " article" + (total > 1 ? "s" : "") + "</div></span>" +
-      '<span class="fc-check">✓</span></button>";
+      '<span class="fc-check">✓</span></button>';
     S.sources.forEach(function (s) {
       var n = counts[s.key] || 0;
       html += '<button type="button" class="filter-chip' + (S.filterSource === s.key ? " active" : "") +
@@ -1482,6 +1482,7 @@
       S.initialized = true;
       setHint();
       applyArticles(args.articles || []);
+      buildFilterView();
       fitHeight();
       if (S.customFeeds.length && !feedsEqual(S.customFeeds, serverFeeds)) {
         syncFeedsToPython();
@@ -1493,6 +1494,7 @@
       var next = args.articles.map(function (a) { return a.id; }).join("|");
       if (prev !== next) applyArticles(args.articles);
       else applyEnrichments();
+      if (args.enrichments && args.enrichments.sources) buildFilterView();
       S.feedsSynced = true;
     } else {
       applyEnrichments();
