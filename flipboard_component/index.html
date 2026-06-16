@@ -360,7 +360,22 @@
     color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 14px;
     font-family: inherit;
   }
-  .feed-form input:focus { outline: none; border-color: #4a4a55; }
+  .feed-form select {
+    width: 100%; border: 1px solid var(--line); background: var(--panel);
+    color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    font-family: inherit;
+  }
+  .feed-form select:focus { outline: none; border-color: #4a4a55; }
+  .feed-item .fi-type {
+    font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px;
+    color: var(--accent); margin-bottom: 2px;
+  }
+  .feed-hints {
+    margin: 0 0 14px; padding: 10px 12px; border-radius: 10px;
+    background: rgba(225,40,40,.08); border: 1px solid rgba(225,40,40,.22);
+    font-size: 12px; line-height: 1.45; color: #e4e4e7;
+  }
+  .feed-hints code { font-size: 11px; color: #fff; background: rgba(0,0,0,.25); padding: 1px 5px; border-radius: 4px; }
   .emoji-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
   .emoji-pick {
     width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line);
@@ -521,7 +536,26 @@
     <div class="feed-panel-scroll">
       <form class="feed-form" id="feedForm">
         <div class="field">
-          <label for="feedUrl">Lien du flux RSS</label>
+          <label for="feedType">Type de source</label>
+          <select id="feedType">
+            <option value="rss">Flux RSS (URL du flux)</option>
+            <option value="scrape">Scraping (page publications, sans RSS)</option>
+          </select>
+        </div>
+        <div class="field" id="feedPresetWrap" style="display:none">
+          <label for="feedPreset">Modèle de page</label>
+          <select id="feedPreset">
+            <option value="wordpress">WordPress (IRIS, blogs…)</option>
+            <option value="generic">Générique</option>
+          </select>
+        </div>
+        <div class="feed-hints" id="feedHints">
+          <strong>IFRI</strong> et <strong>IRIS</strong> ont déjà un flux RSS officiel :<br>
+          <code>https://www.ifri.org/fr/rss.xml</code><br>
+          <code>https://www.iris-france.org/feed/</code>
+        </div>
+        <div class="field">
+          <label for="feedUrl" id="feedUrlLabel">Lien du flux RSS</label>
           <input type="url" id="feedUrl" placeholder="https://exemple.com/feed.xml" required />
         </div>
         <div class="field">
@@ -539,7 +573,7 @@
         <h3>Vos flux ajoutés</h3>
         <div id="feedList"></div>
       </div>
-      <p class="feed-note">Les flux par défaut (La Vie des Idées, Diploweb, etc.) restent actifs. Vos flux personnalisés s’ajoutent au fil d’actualité.</p>
+      <p class="feed-note">Les flux par défaut restent actifs. Le texte intégral est extrait depuis la page web, ou depuis le contenu RSS si celui-ci est plus complet. Le scraping convient aux sites sans flux RSS (pages WordPress notamment).</p>
     </div>
   </div>
 </div>
@@ -735,6 +769,22 @@
     });
   }
 
+  function feedTypeLabel(type) {
+    return type === "scrape" ? "Scraping" : "RSS";
+  }
+  function updateFeedFormUi() {
+    var type = document.getElementById("feedType").value;
+    var isScrape = type === "scrape";
+    document.getElementById("feedPresetWrap").style.display = isScrape ? "" : "none";
+    document.getElementById("feedUrlLabel").textContent = isScrape
+      ? "URL de la page publications"
+      : "Lien du flux RSS";
+    document.getElementById("feedUrl").placeholder = isScrape
+      ? "https://exemple.com/publications/"
+      : "https://exemple.com/feed.xml";
+    document.getElementById("feedHints").style.display = isScrape ? "none" : "";
+  }
+
   function renderFeedList() {
     var box = document.getElementById("feedList");
     if (!S.customFeeds.length) {
@@ -744,7 +794,9 @@
     box.innerHTML = S.customFeeds.map(function (f, i) {
       return '<div class="feed-item">' +
         '<span class="fi-emoji">' + esc(f.emoji || "📰") + "</span>" +
-        '<div class="fi-body"><div class="fi-name">' + esc(f.name) + '</div><div class="fi-url">' + esc(f.url) + "</div></div>" +
+        '<div class="fi-body"><div class="fi-type">' + esc(feedTypeLabel(f.type || "rss")) +
+        (f.type === "scrape" ? " · " + esc(f.preset || "generic") : "") + '</div>' +
+        '<div class="fi-name">' + esc(f.name) + '</div><div class="fi-url">' + esc(f.url) + "</div></div>" +
         '<button type="button" class="fi-rm" data-i="' + i + '" title="Supprimer">✕</button></div>';
     }).join("");
     box.querySelectorAll(".fi-rm").forEach(function (btn) {
@@ -765,15 +817,22 @@
     if (e.target === document.getElementById("feedPanelOverlay")) closeFeedPanel();
   });
   document.getElementById("feedEmoji").addEventListener("input", renderEmojiRow);
+  document.getElementById("feedType").addEventListener("change", updateFeedFormUi);
   document.getElementById("feedForm").addEventListener("submit", function (e) {
     e.preventDefault();
+    var type = document.getElementById("feedType").value;
+    var preset = document.getElementById("feedPreset").value;
     var url = document.getElementById("feedUrl").value.trim();
     var name = document.getElementById("feedName").value.trim();
     var emoji = document.getElementById("feedEmoji").value.trim() || "📰";
     if (!url || !name) { toast("URL et nom requis"); return; }
     if (!/^https?:\/\//i.test(url)) { toast("L’URL doit commencer par http:// ou https://"); return; }
-    if (S.customFeeds.some(function (f) { return f.url === url; })) { toast("Ce flux est déjà ajouté"); return; }
-    S.customFeeds.push({ url: url, name: name, emoji: emoji });
+    if (S.customFeeds.some(function (f) { return f.url === url && (f.type || "rss") === type; })) {
+      toast("Cette source est déjà ajoutée"); return;
+    }
+    var feed = { url: url, name: name, emoji: emoji, type: type };
+    if (type === "scrape") feed.preset = preset;
+    S.customFeeds.push(feed);
     persistCustomFeeds();
     document.getElementById("feedUrl").value = "";
     document.getElementById("feedName").value = "";
@@ -781,9 +840,10 @@
     renderEmojiRow();
     renderFeedList();
     syncFeedsToPython();
-    toast("Flux ajouté — actualisation du fil…");
+    toast(type === "scrape" ? "Source scraping ajoutée — actualisation…" : "Flux ajouté — actualisation du fil…");
   });
   renderEmojiRow();
+  updateFeedFormUi();
 
   document.getElementById("backToTop").addEventListener("click", function () {
     if (S.view !== "discover") setView("discover");
