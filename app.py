@@ -282,6 +282,26 @@ def _article_depuis_entry(entry, nom, emoji, i):
     return art
 
 
+def _lister_sources(custom_feeds):
+    """Liste des médias disponibles pour le filtre (flux par défaut + personnalisés)."""
+    sources = []
+    seen = set()
+    for label in RSS_FEEDS:
+        emoji, nom = _split_emoji(label)
+        key = f"{emoji}|{nom}"
+        if key not in seen:
+            seen.add(key)
+            sources.append({"key": key, "name": nom, "emoji": emoji})
+    for f in custom_feeds or []:
+        emoji = (f.get("emoji") or "📰").strip() or "📰"
+        nom = (f.get("name") or "Source").strip()
+        key = f"{emoji}|{nom}"
+        if key not in seen:
+            seen.add(key)
+            sources.append({"key": key, "name": nom, "emoji": emoji})
+    return sources
+
+
 def _feeds_cache_key(custom_feeds):
     """Clé de cache stable pour les flux personnalisés."""
     normalized = []
@@ -504,6 +524,7 @@ enrichments = {
     "summary": st.session_state.enrich_summary,
     "notebooklm": NOTEBOOKLM_URL,
     "custom_feeds": st.session_state.custom_feeds,
+    "sources": _lister_sources(st.session_state.custom_feeds),
 }
 
 valeur = flipboard(articles, enrichments)

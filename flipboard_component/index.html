@@ -91,7 +91,8 @@
     border-radius: 5px; padding: 1px 6px; font-size: 11px; color: var(--text); font-family: inherit;
   }
 
-  .stage { position: relative; flex: 1 1 auto; min-height: 0; }
+  .stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .stage.has-filter .pager { top: 40px; }
 
   /* ---------- PAGER (Découvrir) ---------- */
   .pager {
@@ -106,11 +107,16 @@
     position: relative; width: 100%; height: 100%;
     scroll-snap-align: start; scroll-snap-stop: always;
     overflow: hidden; touch-action: pan-y;
+    perspective: 1200px;
   }
   .page-card {
     position: absolute; inset: 0;
     will-change: transform;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    transition: transform 0.42s cubic-bezier(0.34, 1.05, 0.44, 1), opacity 0.35s ease;
   }
+  .page-card.flash-flip-out { transform: rotateY(-88deg); opacity: 0.15; }
   .page-media { position: absolute; inset: 0; background: #15151a; }
   .page-media img {
     width: 100%; height: 100%; object-fit: cover; display: block;
@@ -233,6 +239,37 @@
 
   /* ---------- SAVED GRID ---------- */
   .saved-wrap { position: absolute; inset: 0; overflow-y: auto; padding: 22px; display: none; }
+
+  /* ---------- FILTER ---------- */
+  .filter-wrap { position: absolute; inset: 0; overflow-y: auto; padding: 22px; display: none; }
+  .filter-intro { color: var(--muted); font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+  .filter-list { display: flex; flex-direction: column; gap: 8px; }
+  .filter-chip {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+    padding: 14px 16px; border-radius: 12px; cursor: pointer; text-align: left;
+    font-family: inherit; transition: all .15s ease;
+  }
+  .filter-chip:hover { border-color: #3a3a44; background: var(--panel-2); }
+  .filter-chip.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px rgba(225,40,40,.25); }
+  .filter-chip .fc-emoji { font-size: 24px; flex: 0 0 auto; }
+  .filter-chip .fc-body { flex: 1 1 auto; min-width: 0; }
+  .filter-chip .fc-name { font-weight: 700; font-size: 15px; }
+  .filter-chip .fc-count { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .filter-chip .fc-check { color: var(--accent); font-weight: 800; font-size: 16px; opacity: 0; }
+  .filter-chip.active .fc-check { opacity: 1; }
+  .filter-active-bar {
+    display: none; align-items: center; gap: 8px;
+    padding: 8px 14px; background: rgba(225,40,40,.12); border-bottom: 1px solid rgba(225,40,40,.25);
+    font-size: 13px; font-weight: 600; color: #fff; flex: 0 0 auto;
+  }
+  .filter-active-bar.show { display: flex; }
+  .filter-active-bar .fab-label { flex: 1; opacity: .95; }
+  .filter-active-bar button {
+    border: 1px solid rgba(255,255,255,.2); background: rgba(0,0,0,.25);
+    color: #fff; border-radius: 999px; padding: 4px 10px; font-size: 11px;
+    font-weight: 700; cursor: pointer; font-family: inherit;
+  }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); grid-auto-rows: var(--row); gap: var(--gap); }
   .card { cursor: pointer; }
   .face {
@@ -262,8 +299,23 @@
   /* ---------- READER ---------- */
   .reader-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(8,8,10,.78); backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .reader-overlay.open { opacity: 1; pointer-events: auto; }
-  .reader { position: absolute; top: 0; right: 0; bottom: 0; width: min(760px,100%); background: #121216; border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgba(0,0,0,.55); transform: translateX(100%); transition: transform .35s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; }
+  .reader { position: absolute; top: 0; right: 0; bottom: 0; width: min(760px,100%); background: #121216; border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgba(0,0,0,.55); transform: translateX(100%); transition: transform .35s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; backface-visibility: hidden; }
   .reader-overlay.open .reader { transform: translateX(0); }
+  .reader-overlay.flip-enter { perspective: 1200px; }
+  .reader-overlay.flip-enter .reader {
+    width: 100%; right: 0; left: 0; border-left: none;
+    transform: rotateY(88deg); transform-origin: center center;
+    transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1);
+  }
+  .reader-overlay.flip-enter.open .reader { transform: rotateY(0deg); }
+  @media (min-width: 721px) {
+    .reader-overlay.flip-enter .reader {
+      width: min(760px, 100%); right: 0; left: auto; border-left: 1px solid var(--line);
+      transform: translateX(100%); transform-origin: right center;
+      transition: transform .35s cubic-bezier(.2,.8,.2,1);
+    }
+    .reader-overlay.flip-enter.open .reader { transform: translateX(0); }
+  }
   .reader-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-bottom: 1px solid var(--line); background: #15151a; }
   .reader-bar .r-src { color: var(--accent); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
   .icon-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; transition: all .15s ease; }
@@ -431,7 +483,7 @@
       border: 1px solid transparent; border-bottom: none;
       border-radius: 10px 10px 0 0;
       background: #16161b; color: var(--muted);
-      padding: 10px 8px; font-size: 13px; font-weight: 700;
+      padding: 9px 4px; font-size: 11.5px; font-weight: 700;
       text-align: center; position: relative; top: 1px;
       box-shadow: inset 0 -1px 0 rgba(255,255,255,.04);
     }
@@ -467,6 +519,7 @@
       </div>
       <div class="tabs">
         <button class="tab active" data-view="discover" id="tabDiscover">Découvrir</button>
+        <button class="tab" data-view="filter" id="tabFilter">Filtrer</button>
         <button class="tab" data-view="saved" id="tabSaved"><span class="lbl-desktop">🔖 Mon Magazine</span><span class="lbl-mobile">Magazine</span><span class="count" id="savedCount">0</span></button>
       </div>
       <div class="spacer"></div>
@@ -479,7 +532,12 @@
   </header>
 
   <div class="stage">
+    <div class="filter-active-bar" id="filterActiveBar">
+      <span class="fab-label" id="filterActiveLabel"></span>
+      <button type="button" id="filterActiveEdit">Modifier</button>
+    </div>
     <div class="pager" id="pager" tabindex="0"></div>
+    <div class="filter-wrap" id="filterWrap"><div class="filter-list" id="filterList"></div></div>
     <div class="saved-wrap" id="savedWrap"><div class="grid" id="grid"></div></div>
   </div>
 </div>
@@ -571,6 +629,7 @@
 
   var S = {
     articles: [], index: {}, enrich: { text: {}, summary: {} }, notebooklm: "https://notebooklm.google.com",
+    sources: [], filterSource: null,
     view: "discover", current: 0, pageEls: [], feed: [], saved: loadSaved(), dismissed: loadDismissed(),
     initialized: false, openId: null, pending: {}, collapsed: false, manualBar: false,
     customFeeds: loadCustomFeeds(), feedsSynced: false, feedPanelOpen: false,
@@ -666,6 +725,7 @@
     buildPager();
     updateBackToTop();
     updateFeedGear();
+    if (S.view === "filter") buildFilterView();
   }
 
   function toast(msg) {
@@ -677,8 +737,84 @@
   // ---------- DOM ----------
   var pager = document.getElementById("pager");
   var savedWrap = document.getElementById("savedWrap");
+  var filterWrap = document.getElementById("filterWrap");
   var grid = document.getElementById("grid");
   var topbar = document.getElementById("topbar");
+  var stageEl = document.querySelector(".stage");
+
+  function sourceKey(a) {
+    return (a.emoji || "📰") + "|" + (a.source || "");
+  }
+  function findSource(key) {
+    for (var i = 0; i < S.sources.length; i++) {
+      if (S.sources[i].key === key) return S.sources[i];
+    }
+    return null;
+  }
+  function countArticlesBySource() {
+    var counts = {};
+    S.articles.forEach(function (a) {
+      if (isDismissed(a.id)) return;
+      var k = sourceKey(a);
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }
+  function updateFilterBar() {
+    var bar = document.getElementById("filterActiveBar");
+    var src = S.filterSource ? findSource(S.filterSource) : null;
+    if (src && S.view === "discover") {
+      document.getElementById("filterActiveLabel").textContent =
+        "Filtre actif : " + src.emoji + " " + src.name;
+      bar.classList.add("show");
+      stageEl.classList.add("has-filter");
+    } else {
+      bar.classList.remove("show");
+      stageEl.classList.remove("has-filter");
+    }
+  }
+  function buildFilterView() {
+    var list = document.getElementById("filterList");
+    var counts = countArticlesBySource();
+    var total = 0;
+    Object.keys(counts).forEach(function (k) { total += counts[k]; });
+    var html = '<p class="filter-intro">Choisissez un média pour n\'afficher que ses articles dans « Découvrir ».</p>';
+    html += '<button type="button" class="filter-chip' + (!S.filterSource ? " active" : "") + '" data-key="">' +
+      '<span class="fc-emoji">🌐</span><span class="fc-body"><div class="fc-name">Tous les médias</div>' +
+      '<div class="fc-count">' + total + " article" + (total > 1 ? "s" : "") + "</div></span>" +
+      '<span class="fc-check">✓</span></button>";
+    S.sources.forEach(function (s) {
+      var n = counts[s.key] || 0;
+      html += '<button type="button" class="filter-chip' + (S.filterSource === s.key ? " active" : "") +
+        '" data-key="' + esc(s.key) + '">' +
+        '<span class="fc-emoji">' + esc(s.emoji) + '</span><span class="fc-body"><div class="fc-name">' + esc(s.name) +
+        '</div><div class="fc-count">' + n + " article" + (n !== 1 ? "s" : "") + "</div></span>" +
+        '<span class="fc-check">✓</span></button>';
+    });
+    list.innerHTML = html;
+    list.querySelectorAll(".filter-chip").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        applySourceFilter(btn.getAttribute("data-key") || null);
+      });
+    });
+  }
+  function applySourceFilter(key) {
+    S.filterSource = key || null;
+    buildFilterView();
+    buildPager();
+    updateFilterBar();
+    setView("discover", true);
+    goToPage(0);
+    if (key) {
+      var src = findSource(key);
+      toast(src ? "Filtre : " + src.emoji + " " + src.name : "Filtre appliqué");
+    } else {
+      toast("Tous les médias");
+    }
+  }
+  document.getElementById("filterActiveEdit").addEventListener("click", function () {
+    setView("filter");
+  });
 
   // ---------- Collapsible top bar ----------
   function setCollapsed(c) {
@@ -815,6 +951,10 @@
     pager.innerHTML = "";
     S.pageEls = [];
     S.feed = S.articles.filter(function (a) { return !isDismissed(a.id); });
+    if (S.filterSource) {
+      S.feed = S.feed.filter(function (a) { return sourceKey(a) === S.filterSource; });
+    }
+    updateFilterBar();
     if (!S.feed.length) {
       pager.innerHTML = !S.articles.length
         ? '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">📭</div><h2>Aucun article</h2><p>Les flux sont momentanément indisponibles.</p></div>'
@@ -1122,20 +1262,25 @@
   }
 
   // ---------- Tabs ----------
-  function setView(v) {
-    if (S.view === v) return;
+  function setView(v, force) {
+    if (S.view === v && !force) return;
     S.view = v;
     document.getElementById("tabDiscover").classList.toggle("active", v === "discover");
+    document.getElementById("tabFilter").classList.toggle("active", v === "filter");
     document.getElementById("tabSaved").classList.toggle("active", v === "saved");
     pager.style.display = v === "discover" ? "" : "none";
+    filterWrap.style.display = v === "filter" ? "block" : "none";
     savedWrap.style.display = v === "saved" ? "block" : "none";
     refreshMiniMag();
     updateBackToTop();
     updateFeedGear();
+    updateFilterBar();
     if (v === "saved") buildSavedGrid();
+    else if (v === "filter") buildFilterView();
     else { pager.focus(); }
   }
   document.getElementById("tabDiscover").addEventListener("click", function () { setView("discover"); });
+  document.getElementById("tabFilter").addEventListener("click", function () { setView("filter"); });
   document.getElementById("tabSaved").addEventListener("click", function () { setView("saved"); });
 
   // ---------- Keyboard ----------
@@ -1170,7 +1315,11 @@
 
   document.getElementById("readerClose").addEventListener("click", closeReader);
   overlay.addEventListener("click", function (e) { if (e.target === overlay) closeReader(); });
-  function closeReader() { overlay.classList.remove("open"); S.openId = null; }
+  function closeReader() {
+    overlay.classList.remove("open");
+    setTimeout(function () { overlay.classList.remove("flip-enter"); }, 400);
+    S.openId = null;
+  }
 
   function request(id, want) {
     S.pending[id] = S.pending[id] || {};
@@ -1180,18 +1329,40 @@
 
   function syncReaderSaveState(id) { if (S.openId === id) rFlip.classList.toggle("on", isSaved(id)); }
 
-  function openReader(id) {
-    var a = S.index[id]; if (!a) return;
-    S.openId = id;
+  function populateReader(a) {
+    S.openId = a.id;
     rSrc.textContent = a.emoji + " " + a.source;
     rTitle.textContent = a.title;
     rMeta.innerHTML = (a.author ? "<span>" + esc(a.author) + "</span><span>·</span>" : "") + "<span>" + esc(a.date || "") + "</span>";
     if (a.image) { rHero.style.display = "block"; rHero.src = a.image; rHero.onerror = function () { rHero.style.display = "none"; }; }
     else rHero.style.display = "none";
-    rFlip.classList.toggle("on", isSaved(id));
+    rFlip.classList.toggle("on", isSaved(a.id));
     document.getElementById("readerScroll").scrollTop = 0;
-    overlay.classList.add("open");
     renderReaderActions(a); renderReaderBody(a); renderReaderSummary(a);
+  }
+
+  function openReader(id) {
+    var a = S.index[id]; if (!a) return;
+    var useFlip = (IS_MOBILE || IS_TOUCH) && S.view === "discover";
+    var page = S.pageEls[S.current];
+    var card = page && page.querySelector(".page-card");
+
+    function reveal() {
+      if (useFlip) overlay.classList.add("flip-enter");
+      else overlay.classList.remove("flip-enter");
+      populateReader(a);
+      overlay.classList.add("open");
+    }
+
+    if (useFlip && card) {
+      card.classList.add("flash-flip-out");
+      setTimeout(function () {
+        reveal();
+        setTimeout(function () { card.classList.remove("flash-flip-out"); }, 480);
+      }, 200);
+      return;
+    }
+    reveal();
   }
 
   function renderReaderActions(a) {
@@ -1298,6 +1469,7 @@
     if (!args) return;
     S.enrich = args.enrichments || { text: {}, summary: {} };
     if (args.enrichments && args.enrichments.notebooklm) S.notebooklm = args.enrichments.notebooklm;
+    if (args.enrichments && args.enrichments.sources) S.sources = args.enrichments.sources;
 
     var serverFeeds = (args.enrichments && args.enrichments.custom_feeds) || [];
     if (!feedsEqual(S.customFeeds, serverFeeds) && S.feedsSynced) {
