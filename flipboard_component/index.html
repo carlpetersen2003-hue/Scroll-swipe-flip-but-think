@@ -82,6 +82,7 @@
   .tab:hover { color: var(--text); border-color: #3a3a44; }
   .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .tab .count { display: inline-block; margin-left: 6px; opacity: .85; font-weight: 700; }
+  .tab .lbl-mobile { display: none; }
   .spacer { flex: 1 1 auto; }
   .hint { color: var(--muted); font-size: 12.5px; text-align: right; }
   .hint b { color: var(--text); }
@@ -151,10 +152,15 @@
   }
   .page-title {
     font-family: Georgia, "Times New Roman", serif;
-    font-size: clamp(26px, 3.7vw, 46px); line-height: 1.12; letter-spacing: -0.5px;
-    margin: 0 0 12px; max-width: 22ch;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    font-size: clamp(22px, 3.4vw, 42px); line-height: 1.18; letter-spacing: -0.4px;
+    margin: 0 0 12px; max-width: min(780px, 96%);
   }
+  .page-title .title-lead { font-weight: 700; }
+  .page-title .title-rest {
+    font-size: 0.74em; font-weight: 600; opacity: 0.93;
+    line-height: 1.28; letter-spacing: -0.2px;
+  }
+  .page-title.title-short { font-size: clamp(24px, 3.6vw, 44px); }
   .page-excerpt {
     font-size: clamp(14px, 1.4vw, 18px); line-height: 1.5; color: #e4e4e7;
     max-width: 60ch; margin: 0 0 12px;
@@ -183,7 +189,7 @@
     cursor: pointer;
   }
   .next-pill .chev { animation: bob 1.6s ease-in-out infinite; font-size: 14px; color: #fff; }
-  .next-pill .nt { color: #fff; font-weight: 700; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .next-pill .nt { color: #fff; font-weight: 700; max-width: 58vw; font-size: 12.5px; line-height: 1.25; }
   .next-pill .lbl { color: var(--muted); }
   @keyframes bob { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-4px);} }
 
@@ -290,6 +296,78 @@
     transition: all .25s ease; max-width: 80vw; text-align: center;
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ---------- BACK TO TOP ---------- */
+  .back-top {
+    position: fixed; right: 18px; bottom: 78px; z-index: 30;
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(19,19,22,.88);
+    backdrop-filter: blur(10px); color: #fff;
+    padding: 10px 16px; border-radius: 999px; cursor: pointer;
+    font-size: 13px; font-weight: 700;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+    opacity: 0; pointer-events: none; transform: translateY(12px);
+    transition: opacity .22s ease, transform .22s ease, background .15s ease;
+  }
+  .back-top:hover { background: rgba(30,30,36,.95); border-color: rgba(255,255,255,.28); }
+  .back-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .back-top .ic { font-size: 15px; line-height: 1; }
+
+  /* ---------- MOBILE TAB BAR (style onglets navigateur) ---------- */
+  @media (max-width: 720px) {
+    header.top {
+      padding: 0; background: #0f0f12;
+      border-bottom: none;
+    }
+    header.top.collapsed { padding: 0; }
+    .bar-toggle { display: none; }
+    .bar-full {
+      flex-direction: column; align-items: stretch; gap: 0;
+      padding: 0; max-height: none; opacity: 1;
+    }
+    header.top.collapsed .bar-full { max-height: none; opacity: 1; }
+    .bar-mini { display: none !important; }
+
+    .brand {
+      padding: 8px 14px 6px; gap: 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand h1 { font-size: 17px; }
+    .brand .sub { display: none; }
+    .brand .mark { width: 22px; height: 22px; font-size: 14px; transform: translateY(2px); }
+
+    .tabs {
+      display: flex; margin: 0; gap: 0; padding: 0 8px;
+      background: #0c0c0f;
+      border-bottom: 1px solid var(--line);
+    }
+    .tab {
+      flex: 1; margin: 0;
+      border: 1px solid transparent; border-bottom: none;
+      border-radius: 10px 10px 0 0;
+      background: #16161b; color: var(--muted);
+      padding: 10px 8px; font-size: 13px; font-weight: 700;
+      text-align: center; position: relative; top: 1px;
+      box-shadow: inset 0 -1px 0 rgba(255,255,255,.04);
+    }
+    .tab + .tab { margin-left: 4px; }
+    .tab .lbl-desktop { display: none; }
+    .tab .lbl-mobile { display: inline; }
+    .tab.active {
+      background: #1c1c22; color: #fff;
+      border-color: var(--line); border-bottom-color: #1c1c22;
+      box-shadow: 0 -2px 0 var(--accent) inset;
+    }
+    .tab:not(.active):hover { color: var(--text); background: #1a1a20; }
+
+    .spacer, .hint { display: none; }
+
+    .page-inner { padding: 0 5vw 88px; }
+    .page-textwrap { padding: 14px 16px 16px; }
+    .page-title { font-size: clamp(20px, 5.2vw, 30px); }
+    .page-title .title-rest { font-size: 0.78em; }
+    .back-top { right: 14px; bottom: 70px; padding: 9px 14px; font-size: 12.5px; }
+  }
 </style>
 </head>
 <body>
@@ -303,7 +381,7 @@
       </div>
       <div class="tabs">
         <button class="tab active" data-view="discover" id="tabDiscover">Découvrir</button>
-        <button class="tab" data-view="saved" id="tabSaved">🔖 Mon Magazine<span class="count" id="savedCount">0</span></button>
+        <button class="tab" data-view="saved" id="tabSaved"><span class="lbl-desktop">🔖 Mon Magazine</span><span class="lbl-mobile">Magazine</span><span class="count" id="savedCount">0</span></button>
       </div>
       <div class="spacer"></div>
       <div class="hint" id="hint"></div>
@@ -343,6 +421,9 @@
 </div>
 
 <div id="toast"></div>
+<button class="back-top" id="backToTop" type="button" title="Revenir au plus récent" aria-label="Revenir au plus récent">
+  <span class="ic">↑</span><span>Plus récent</span>
+</button>
 
 <script>
 (function () {
@@ -412,6 +493,20 @@
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   function stripTags(html) { var d = document.createElement("div"); d.innerHTML = html || ""; return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim(); }
 
+  function formatTitle(title, leadWords) {
+    var words = String(title || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return "";
+    var n = leadWords == null ? 7 : leadWords;
+    if (words.length <= n) return '<span class="title-lead">' + esc(title) + "</span>";
+    return '<span class="title-lead">' + esc(words.slice(0, n).join(" ")) + '</span> <span class="title-rest">' + esc(words.slice(n).join(" ")) + "</span>";
+  }
+  function titleLeadCount(title) {
+    var n = String(title || "").trim().split(/\s+/).filter(Boolean).length;
+    if (n <= 8) return n;
+    if (n <= 14) return 7;
+    return 6;
+  }
+
   function toast(msg) {
     var t = document.getElementById("toast");
     t.textContent = msg; t.classList.add("show");
@@ -440,7 +535,23 @@
   function refreshMiniMag() {
     document.getElementById("miniMag").classList.toggle("active", S.view === "saved");
   }
+  var IS_MOBILE = window.matchMedia("(max-width: 720px)").matches;
+  window.matchMedia("(max-width: 720px)").addEventListener("change", function (e) { IS_MOBILE = e.matches; });
+
+  function updateBackToTop() {
+    var btn = document.getElementById("backToTop");
+    var show = S.view === "discover" && S.feed.length > 1 && S.current > 0;
+    btn.classList.toggle("show", show);
+  }
+
+  document.getElementById("backToTop").addEventListener("click", function () {
+    if (S.view !== "discover") setView("discover");
+    goToPage(0);
+    toast("Retour au plus récent");
+  });
+
   function onContentScroll(top) {
+    if (IS_MOBILE) return;
     if (top <= 4) { S.manualBar = false; setCollapsed(false); }
     else if (!S.manualBar) { setCollapsed(true); }
   }
@@ -471,7 +582,9 @@
       frag.appendChild(buildPage(a, i));
     });
     pager.appendChild(frag);
+    S.current = 0;
     loadAround(0);
+    updateBackToTop();
   }
 
   function buildPage(a, i) {
@@ -497,7 +610,7 @@
         '<div class="page-inner">' +
           '<span class="src-chip">' + esc(a.emoji) + " " + esc(a.source) + "</span>" +
           '<div class="page-textwrap">' +
-            '<h2 class="page-title">' + esc(a.title) + "</h2>" +
+            '<h2 class="page-title' + (String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "") + '">' + formatTitle(a.title, titleLeadCount(a.title)) + "</h2>" +
             (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
             '<div class="page-meta">' +
               (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
@@ -582,6 +695,7 @@
     var ci = Math.max(0, Math.min(S.feed.length - 1, Math.round(pager.scrollTop / pager.clientHeight)));
     S.current = ci;
     loadAround(ci);
+    updateBackToTop();
   }
 
   function wirePage(page, a) {
@@ -686,12 +800,15 @@
 
   function goToPage(i) {
     i = Math.max(0, Math.min(S.pageEls.length - 1, i));
+    S.current = i;
+    updateBackToTop();
     pager.scrollTo({ top: i * pager.clientHeight, behavior: "smooth" });
+    loadAround(i);
   }
 
   pager.addEventListener("scroll", function () {
     var i = Math.round(pager.scrollTop / pager.clientHeight);
-    if (i !== S.current) { S.current = i; loadAround(i); }
+    if (i !== S.current) { S.current = i; loadAround(i); updateBackToTop(); }
     onContentScroll(pager.scrollTop);
   });
   savedWrap.addEventListener("scroll", function () { onContentScroll(savedWrap.scrollTop); });
@@ -769,6 +886,7 @@
     pager.style.display = v === "discover" ? "" : "none";
     savedWrap.style.display = v === "saved" ? "block" : "none";
     refreshMiniMag();
+    updateBackToTop();
     if (v === "saved") buildSavedGrid();
     else { pager.focus(); }
   }
@@ -935,7 +1053,7 @@
       S.articles = args.articles || [];
       S.index = {}; S.articles.forEach(function (a) { S.index[a.id] = a; });
       S.initialized = true;
-      setHint(); updateSavedCount(); buildPager(); fitHeight();
+      setHint(); updateSavedCount(); buildPager(); updateBackToTop(); fitHeight();
     } else {
       applyEnrichments();
     }
