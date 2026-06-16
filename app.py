@@ -190,12 +190,32 @@ def _excerpt(summary_html, limite=240):
     return coupe + "…"
 
 
+def _feeds_cache_key(custom_feeds):
+    """Clé de cache stable pour les flux personnalisés."""
+    return json.dumps(
+        sorted(custom_feeds or [], key=lambda f: f.get("url", "")),
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+
+
 @st.cache_data(show_spinner=False, ttl=600)
-def collecter_articles():
+def collecter_articles(feeds_key=""):
     """Agrège tous les flux en une liste mixée façon magazine."""
     par_flux = []
+    feeds = dict(RSS_FEEDS)
 
-    for label, url in RSS_FEEDS.items():
+    try:
+        for f in json.loads(feeds_key or "[]"):
+            url = (f.get("url") or "").strip()
+            name = (f.get("name") or "Source").strip()
+            emoji = (f.get("emoji") or "📰").strip() or "📰"
+            if url:
+                feeds[f"{emoji} {name}"] = url
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    for label, url in feeds.items():
         emoji, nom = _split_emoji(label)
         flux = feedparser.parse(url)
         articles_flux = []
@@ -318,36 +338,48 @@ if "enrich_summary" not in st.session_state:
     st.session_state.enrich_summary = {}
 if "last_nonce" not in st.session_state:
     st.session_state.last_nonce = None
+if "custom_feeds" not in st.session_state:
+    st.session_state.custom_feeds = []
 
-articles = collecter_articles()
+feeds_key = _feeds_cache_key(st.session_state.custom_feeds)
+articles = collecter_articles(feeds_key)
 index = {a["id"]: a for a in articles}
 
 enrichments = {
     "text": st.session_state.enrich_text,
     "summary": st.session_state.enrich_summary,
     "notebooklm": NOTEBOOKLM_URL,
+    "custom_feeds": st.session_state.custom_feeds,
 }
 
 valeur = flipboard(articles, enrichments)
 
-# Traitement des actions renvoyées par le composant (lecture / résumé)
+# Traitement des actions renvoyées par le composant
 if isinstance(valeur, dict) and valeur.get("nonce") != st.session_state.last_nonce:
     st.session_state.last_nonce = valeur.get("nonce")
-    aid = valeur.get("id")
-    want = valeur.get("want")
-    art = index.get(aid)
 
-    if art:
-        if want in ("text", "both") and aid not in st.session_state.enrich_text:
-            paras = extraire_paragraphes(art["link"])
-            if not paras:
-                fallback = nettoyer_html(art["summary_html"]).strip()
-                paras = [fallback] if fallback else []
-            st.session_state.enrich_text[aid] = paras
+    if valeur.get("action") == "feeds":
+        new_feeds = valeur.get("feeds") or []
+        if new_feeds != st.session_state.custom_feeds:
+            st.session_state.custom_feeds = new_feeds
+            collecter_articles.clear()
+            st.rerun()
+    elif valeur.get("id"):
+        aid = valeur.get("id")
+        want = valeur.get("want")
+        art = index.get(aid)
 
-        if want in ("summary", "both") and aid not in st.session_state.enrich_summary:
-            st.session_state.enrich_summary[aid] = resume_pour_url(
-                art["link"], art["summary_html"]
-            )
+        if art:
+            if want in ("text", "both") and aid not in st.session_state.enrich_text:
+                paras = extraire_paragraphes(art["link"])
+                if not paras:
+                    fallback = nettoyer_html(art["summary_html"]).strip()
+                    paras = [fallback] if fallback else []
+                st.session_state.enrich_text[aid] = paras
 
-    st.rerun()
+            if want in ("summary", "both") and aid not in st.session_state.enrich_summary:
+                st.session_state.enrich_summary[aid] = resume_pour_url(
+                    art["link"], art["summary_html"]
+                )
+
+        st.rerun()
