@@ -152,31 +152,25 @@
 
   .flip-card-inner {
     position: relative; transform-style: preserve-3d;
+    transform: rotateY(0deg);
     transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1);
+    width: 100%;
   }
-  .page-textwrap.is-flipping.flipped .flip-card-inner { transform: rotateY(180deg); }
-  .page-textwrap.is-flipping:not(.flipped) .flip-card-inner { transform: rotateY(0deg); }
+  .page-textwrap.flipped .flip-card-inner { transform: rotateY(180deg); }
   .flip-card-front, .flip-card-back {
     backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    width: 100%; box-sizing: border-box;
   }
-  .flip-card-front { transform: rotateY(0deg); }
+  .flip-card-front { transform: rotateY(0deg) translateZ(1px); }
   .flip-card-back {
     position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    transform: rotateY(180deg);
+    transform: rotateY(180deg) translateZ(1px);
     overflow: hidden;
-  }
-  .page-textwrap.show-back .flip-card-inner {
-    transform: none; transform-style: flat;
-  }
-  .page-textwrap.show-back .flip-card-front { display: none; }
-  .page-textwrap.show-back .flip-card-back {
-    position: relative; transform: none; height: 100%;
   }
   /* Verso : chapô seul, même typo que page-excerpt, plus de lignes dans la même hauteur */
   .page-chapo-back {
-    margin: 0; height: 100%;
+    margin: 0; height: 100%; width: 100%;
     font-size: clamp(14px, 1.4vw, 18px); line-height: 1.5; color: #e4e4e7;
-    max-width: 60ch;
     display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
     -webkit-line-clamp: 9;
   }
@@ -754,14 +748,32 @@
     chapo.style.webkitLineClamp = String(lines);
     chapo.style.lineClamp = String(lines);
   }
+  function lockCardDimensions(textwrap) {
+    var inner = textwrap.querySelector(".flip-card-inner");
+    var front = textwrap.querySelector(".flip-card-front");
+    if (!inner || !front) return;
+    var w = Math.ceil(textwrap.offsetWidth) + "px";
+    var h = Math.ceil(front.offsetHeight) + "px";
+    textwrap.style.width = w;
+    textwrap.style.minWidth = w;
+    textwrap.style.maxWidth = w;
+    inner.style.minHeight = h;
+  }
+  function clearCardDimensions(textwrap) {
+    textwrap.style.width = "";
+    textwrap.style.minWidth = "";
+    textwrap.style.maxWidth = "";
+    var inner = textwrap.querySelector(".flip-card-inner");
+    if (inner) inner.style.minHeight = "";
+  }
   function resetTextwrapFlip(page) {
     var tw = page && page.querySelector(".page-textwrap");
     if (!tw) return;
-    if (!tw.classList.contains("flipped") && !tw.classList.contains("show-back") && !tw.classList.contains("is-flipping")) return;
-    tw.classList.remove("flipped", "is-flipping", "show-back");
+    if (!tw.classList.contains("flipped") && !tw.classList.contains("is-flipping")) return;
+    tw.classList.remove("flipped", "is-flipping");
+    clearCardDimensions(tw);
     var inner = tw.querySelector(".flip-card-inner");
     if (inner) {
-      inner.style.minHeight = "";
       inner.style.transition = "";
       inner.style.transform = "";
     }
@@ -784,43 +796,22 @@
     inner.addEventListener("transitionend", onEnd);
     setTimeout(finish, 520);
   }
-  function flipToBack(textwrap) {
-    var inner = textwrap.querySelector(".flip-card-inner");
-    var front = textwrap.querySelector(".flip-card-front");
-    if (!inner || !front) return;
-    var cardHeight = front.offsetHeight + "px";
-    inner.style.minHeight = cardHeight;
-    textwrap.classList.add("is-flipping");
-    void inner.offsetWidth;
-    textwrap.classList.add("flipped");
-    waitFlipTransition(inner, function () {
-      textwrap.classList.remove("is-flipping", "flipped");
-      textwrap.classList.add("show-back");
-      inner.style.minHeight = cardHeight;
-      inner.style.transform = "";
-      syncChapoBackClamp(textwrap);
-    });
-  }
-  function flipToFront(textwrap) {
-    var inner = textwrap.querySelector(".flip-card-inner");
-    if (!inner) return;
-    textwrap.classList.remove("show-back");
-    textwrap.classList.add("flipped", "is-flipping");
-    inner.style.transition = "none";
-    inner.style.transform = "rotateY(180deg)";
-    void inner.offsetWidth;
-    inner.style.transition = "";
-    textwrap.classList.remove("flipped");
-    waitFlipTransition(inner, function () {
-      textwrap.classList.remove("is-flipping");
-      inner.style.minHeight = "";
-      inner.style.transform = "";
-    });
-  }
   function toggleTextwrapFlip(textwrap) {
     if (textwrap.classList.contains("is-flipping")) return;
-    if (textwrap.classList.contains("show-back")) flipToFront(textwrap);
-    else flipToBack(textwrap);
+    if (!textwrap.classList.contains("flipped")) lockCardDimensions(textwrap);
+    textwrap.classList.add("is-flipping");
+    var showBack = !textwrap.classList.contains("flipped");
+    textwrap.classList.toggle("flipped");
+    if (showBack) syncChapoBackClamp(textwrap);
+    var inner = textwrap.querySelector(".flip-card-inner");
+    if (!inner) {
+      textwrap.classList.remove("is-flipping");
+      return;
+    }
+    waitFlipTransition(inner, function () {
+      textwrap.classList.remove("is-flipping");
+      if (!textwrap.classList.contains("flipped")) clearCardDimensions(textwrap);
+    });
   }
 
   function formatTitle(title, leadWords) {
