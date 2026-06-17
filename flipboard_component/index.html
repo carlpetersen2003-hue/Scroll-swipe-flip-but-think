@@ -665,7 +665,7 @@
   <div class="feed-panel">
     <div class="feed-panel-bar">
       <button class="icon-btn" id="feedPanelClose" type="button" title="Fermer">←</button>
-      <h2>Flux RSS personnalisés</h2>
+      <h2>Paramètres</h2>
     </div>
     <div class="feed-panel-scroll">
       <form class="feed-form" id="feedForm">
@@ -685,10 +685,14 @@
         <button class="feed-add" type="submit">Ajouter ce flux</button>
       </form>
       <div class="feed-list">
+        <h3>Flux par défaut</h3>
+        <div id="defaultFeedList"></div>
+      </div>
+      <div class="feed-list">
         <h3>Vos flux ajoutés</h3>
         <div id="feedList"></div>
       </div>
-      <p class="feed-note">Les flux par défaut restent actifs. Si un article n’a pas de titre ou d’image dans le flux, l’app complète automatiquement depuis la page web.</p>
+      <p class="feed-note">Vous pouvez retirer des flux par défaut ou en ajouter de nouveaux. Si un article n’a pas de titre ou d’image dans le flux, l’app complète automatiquement depuis la page web.</p>
       <div class="feed-reset-section">
         <h3>Fil Découvrir</h3>
         <button type="button" class="feed-reset" id="feedResetDismissed">Réinitialiser</button>
@@ -721,6 +725,7 @@
   var BK = "flip_magazine_bookmarks_v1";
   var DK = "flip_magazine_dismissed_v1";
   var FK = "flip_magazine_custom_feeds_v1";
+  var FDK = "flip_magazine_disabled_defaults_v1";
   var EMOJI_PRESETS = ["📰", "🧠", "🌍", "📚", "👁", "⚖️", "🏛️", "💡", "🔬", "✊", "🎭", "💼"];
 
   var S = {
@@ -728,7 +733,8 @@
     sources: [], filterSource: null,
     view: "discover", current: 0, pageEls: [], feed: [], saved: loadSaved(), dismissed: loadDismissed(),
     initialized: false, openId: null, pending: {}, collapsed: false, manualBar: false,
-    customFeeds: loadCustomFeeds(), feedsSynced: false, feedPanelOpen: false,
+    customFeeds: loadCustomFeeds(), disabledDefaults: loadDisabledDefaults(),
+    defaultFeeds: [], feedsSynced: false, feedPanelOpen: false,
   };
 
   var SRC_GRAD = {
@@ -897,18 +903,36 @@
       });
     } catch (e) { return []; }
   }
+  function loadDisabledDefaults() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(FDK) || "[]");
+      return Array.isArray(raw) ? raw.filter(function (u) { return u; }) : [];
+    } catch (e) { return []; }
+  }
   function persistCustomFeeds() {
     try { localStorage.setItem(FK, JSON.stringify(S.customFeeds)); } catch (e) {}
   }
+  function persistDisabledDefaults() {
+    try { localStorage.setItem(FDK, JSON.stringify(S.disabledDefaults)); } catch (e) {}
+  }
   function feedsEqual(a, b) {
     return JSON.stringify(a || []) === JSON.stringify(b || []);
+  }
+  function feedsConfigEqual(customA, customB, disA, disB) {
+    return feedsEqual(customA, customB) && feedsEqual(disA, disB);
   }
   function syncFeedsToPython() {
     setValue({
       nonce: Date.now() + "-feeds-" + Math.random().toString(36).slice(2),
       action: "feeds",
       feeds: S.customFeeds,
+      disabled_defaults: S.disabledDefaults,
     });
+  }
+  function activeDefaultFeeds() {
+    var disabled = {};
+    S.disabledDefaults.forEach(function (u) { disabled[u] = true; });
+    return (S.defaultFeeds || []).filter(function (f) { return f && f.url && !disabled[f.url]; });
   }
   function applyArticles(articles) {
     S.articles = articles || [];
@@ -1044,6 +1068,7 @@
   function openFeedPanel() {
     S.feedPanelOpen = true;
     document.getElementById("feedPanelOverlay").classList.add("open");
+    renderDefaultFeedList();
     renderFeedList();
     updateFeedGear();
   }
@@ -1063,6 +1088,32 @@
       btn.addEventListener("click", function () {
         document.getElementById("feedEmoji").value = btn.getAttribute("data-emoji");
         renderEmojiRow();
+      });
+    });
+  }
+
+  function renderDefaultFeedList() {
+    var box = document.getElementById("defaultFeedList");
+    var active = activeDefaultFeeds();
+    if (!active.length) {
+      box.innerHTML = '<p class="feed-empty">Tous les flux par défaut ont été retirés.</p>';
+      return;
+    }
+    box.innerHTML = active.map(function (f) {
+      return '<div class="feed-item">' +
+        '<span class="fi-emoji">' + esc(f.emoji || "📰") + "</span>" +
+        '<div class="fi-body"><div class="fi-name">' + esc(f.name) + '</div><div class="fi-url">' + esc(f.url) + "</div></div>" +
+        '<button type="button" class="fi-rm" data-url="' + esc(f.url) + '" title="Retirer ce flux">✕</button></div>';
+    }).join("");
+    box.querySelectorAll(".fi-rm").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var url = btn.getAttribute("data-url");
+        if (!url || S.disabledDefaults.indexOf(url) !== -1) return;
+        S.disabledDefaults.push(url);
+        persistDisabledDefaults();
+        renderDefaultFeedList();
+        syncFeedsToPython();
+        toast("Flux retiré — actualisation du fil…");
       });
     });
   }
@@ -1841,11 +1892,21 @@
     S.enrich = args.enrichments || { text: {}, summary: {} };
     if (args.enrichments && args.enrichments.notebooklm) S.notebooklm = args.enrichments.notebooklm;
     if (args.enrichments && args.enrichments.sources) S.sources = args.enrichments.sources;
+    if (args.enrichments && args.enrichments.default_feeds) {
+      S.defaultFeeds = args.enrichments.default_feeds;
+    }
 
     var serverFeeds = (args.enrichments && args.enrichments.custom_feeds) || [];
-    if (!feedsEqual(S.customFeeds, serverFeeds) && S.feedsSynced) {
+    var serverDisabled = (args.enrichments && args.enrichments.disabled_default_feeds) || [];
+    if (S.feedsSynced && (
+      !feedsEqual(S.customFeeds, serverFeeds) ||
+      !feedsEqual(S.disabledDefaults, serverDisabled)
+    )) {
       S.customFeeds = serverFeeds.slice();
+      S.disabledDefaults = serverDisabled.slice();
       persistCustomFeeds();
+      persistDisabledDefaults();
+      renderDefaultFeedList();
       renderFeedList();
     }
 
@@ -1855,7 +1916,7 @@
       applyArticles(args.articles || []);
       buildFilterView();
       fitHeight();
-      if (S.customFeeds.length && !feedsEqual(S.customFeeds, serverFeeds)) {
+      if (!feedsConfigEqual(S.customFeeds, serverFeeds, S.disabledDefaults, serverDisabled)) {
         syncFeedsToPython();
       } else {
         S.feedsSynced = true;

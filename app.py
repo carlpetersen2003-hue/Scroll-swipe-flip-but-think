@@ -284,11 +284,23 @@ def _article_depuis_entry(entry, nom, emoji, i):
     return art
 
 
-def _lister_sources(custom_feeds):
+def _default_feeds_payload():
+    """Flux RSS intégrés à l'application (modifiables par l'utilisateur)."""
+    feeds = []
+    for label, url in RSS_FEEDS.items():
+        emoji, nom = _split_emoji(label)
+        feeds.append({"url": url, "name": nom, "emoji": emoji})
+    return feeds
+
+
+def _lister_sources(custom_feeds, disabled_defaults=None):
     """Liste des médias disponibles pour le filtre (flux par défaut + personnalisés)."""
+    disabled = set(disabled_defaults or [])
     sources = []
     seen = set()
-    for label in RSS_FEEDS:
+    for label, url in RSS_FEEDS.items():
+        if url in disabled:
+            continue
         emoji, nom = _split_emoji(label)
         key = f"{emoji}|{nom}"
         if key not in seen:
@@ -304,8 +316,8 @@ def _lister_sources(custom_feeds):
     return sources
 
 
-def _feeds_cache_key(custom_feeds):
-    """Clé de cache stable pour les flux personnalisés."""
+def _feeds_cache_key(custom_feeds, disabled_defaults=None):
+    """Clé de cache stable pour la configuration des flux."""
     normalized = []
     for f in custom_feeds or []:
         normalized.append({
@@ -313,19 +325,33 @@ def _feeds_cache_key(custom_feeds):
             "name": f.get("name", ""),
             "emoji": f.get("emoji", ""),
         })
-    return json.dumps(
-        sorted(normalized, key=lambda f: f.get("url", "")),
-        sort_keys=True,
-        ensure_ascii=False,
-    )
+    payload = {
+        "custom": sorted(normalized, key=lambda f: f.get("url", "")),
+        "disabled": sorted(set(disabled_defaults or [])),
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
 @st.cache_data(show_spinner=False, ttl=600)
 def collecter_articles(feeds_key=""):
     """Agrège tous les flux en une liste mixée façon magazine."""
     par_flux = []
+    disabled = set()
+    custom_feeds = []
+
+    try:
+        parsed = json.loads(feeds_key or "{}")
+        if isinstance(parsed, list):
+            custom_feeds = parsed
+        else:
+            custom_feeds = parsed.get("custom", []) or []
+            disabled = set(parsed.get("disabled", []) or [])
+    except (json.JSONDecodeError, TypeError):
+        custom_feeds = []
 
     for label, url in RSS_FEEDS.items():
+        if url in disabled:
+            continue
         emoji, nom = _split_emoji(label)
         flux = feedparser.parse(url)
         articles_flux = []
@@ -337,7 +363,7 @@ def collecter_articles(feeds_key=""):
             par_flux.append(articles_flux)
 
     try:
-        for f in json.loads(feeds_key or "[]"):
+        for f in custom_feeds:
             url = (f.get("url") or "").strip()
             name = (f.get("name") or "Source").strip()
             emoji = (f.get("emoji") or "📰").strip() or "📰"
@@ -535,8 +561,13 @@ if "last_nonce" not in st.session_state:
     st.session_state.last_nonce = None
 if "custom_feeds" not in st.session_state:
     st.session_state.custom_feeds = []
+if "disabled_default_feeds" not in st.session_state:
+    st.session_state.disabled_default_feeds = []
 
-feeds_key = _feeds_cache_key(st.session_state.custom_feeds)
+feeds_key = _feeds_cache_key(
+    st.session_state.custom_feeds,
+    st.session_state.disabled_default_feeds,
+)
 articles = collecter_articles(feeds_key)
 index = {a["id"]: a for a in articles}
 
@@ -545,7 +576,12 @@ enrichments = {
     "summary": st.session_state.enrich_summary,
     "notebooklm": NOTEBOOKLM_URL,
     "custom_feeds": st.session_state.custom_feeds,
-    "sources": _lister_sources(st.session_state.custom_feeds),
+    "default_feeds": _default_feeds_payload(),
+    "disabled_default_feeds": st.session_state.disabled_default_feeds,
+    "sources": _lister_sources(
+        st.session_state.custom_feeds,
+        st.session_state.disabled_default_feeds,
+    ),
 }
 
 valeur = flipboard(articles, enrichments)
@@ -556,8 +592,15 @@ if isinstance(valeur, dict) and valeur.get("nonce") != st.session_state.last_non
 
     if valeur.get("action") == "feeds":
         new_feeds = valeur.get("feeds") or []
+        new_disabled = valeur.get("disabled_defaults") or []
+        changed = False
         if new_feeds != st.session_state.custom_feeds:
             st.session_state.custom_feeds = new_feeds
+            changed = True
+        if new_disabled != st.session_state.disabled_default_feeds:
+            st.session_state.disabled_default_feeds = new_disabled
+            changed = True
+        if changed:
             collecter_articles.clear()
             st.rerun()
     elif valeur.get("id"):
