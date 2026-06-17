@@ -146,8 +146,46 @@
     -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 18px; padding: 18px 24px 20px; margin-bottom: 18px;
+    cursor: pointer; perspective: 1200px;
+    transition: max-width .35s ease, padding .35s ease;
   }
   .page.noimg .page-textwrap { background: rgba(8, 8, 11, 0.22); border-color: transparent; }
+  .page-textwrap.flipped { max-width: min(920px, 96%); }
+  .page-textwrap.chapo-lg.flipped,
+  .page-textwrap.chapo-xl.flipped { padding: 20px 26px 22px; }
+
+  .flip-card-inner {
+    position: relative; transform-style: preserve-3d;
+    transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1), min-height 0.35s ease;
+  }
+  .page-textwrap.flipped .flip-card-inner { transform: rotateY(180deg); }
+  .flip-card-front, .flip-card-back {
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  }
+  .flip-card-back {
+    position: absolute; top: 0; left: 0; right: 0;
+    transform: rotateY(180deg);
+    display: flex; flex-direction: column; justify-content: flex-start;
+  }
+  .page-chapo-full {
+    margin: 0; color: #ececee; line-height: 1.55;
+    font-size: clamp(14px, 1.4vw, 18px);
+  }
+  .page-textwrap.chapo-md .page-chapo-full { font-size: clamp(13px, 1.25vw, 16.5px); line-height: 1.5; }
+  .page-textwrap.chapo-lg .page-chapo-full { font-size: clamp(12px, 1.15vw, 15px); line-height: 1.45; }
+  .page-textwrap.chapo-xl .page-chapo-full {
+    font-size: clamp(11px, 1.05vw, 14px); line-height: 1.42;
+    max-height: min(52vh, 420px); overflow-y: auto; padding-right: 4px;
+  }
+  .page-chapo-full::-webkit-scrollbar { width: 6px; }
+  .page-chapo-full::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 4px; }
+  .flip-back-label {
+    margin: 0 0 10px; color: var(--accent); font-size: 11px; font-weight: 800;
+    letter-spacing: .55px; text-transform: uppercase;
+  }
+  .flip-hint {
+    margin-top: 12px; color: #a1a1aa; font-size: 11.5px; font-weight: 600;
+  }
 
   .src-chip {
     display: inline-flex; align-items: center; gap: 7px;
@@ -299,7 +337,33 @@
   /* ---------- READER ---------- */
   .reader-overlay { position: fixed; inset: 0; z-index: 50; background: rgba(8,8,10,.78); backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .25s ease; }
   .reader-overlay.open { opacity: 1; pointer-events: auto; }
-  .reader { position: absolute; top: 0; right: 0; bottom: 0; width: min(760px,100%); background: #121216; border-left: 1px solid var(--line); box-shadow: -20px 0 60px rgba(0,0,0,.55); transform: translateX(100%); transition: transform .35s cubic-bezier(.2,.8,.2,1); display: flex; flex-direction: column; backface-visibility: hidden; }
+  .reader {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: var(--reader-width, min(760px, 100%));
+    background: #121216; border-left: 1px solid var(--line);
+    box-shadow: -20px 0 60px rgba(0,0,0,.55);
+    transform: translateX(100%); transition: transform .35s cubic-bezier(.2,.8,.2,1);
+    display: flex; flex-direction: column; backface-visibility: hidden;
+  }
+  @media (min-width: 721px) {
+    .reader-resize-handle {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 10px;
+      cursor: ew-resize; z-index: 3; touch-action: none;
+    }
+    .reader-resize-handle:hover,
+    .reader-resize-handle.dragging { background: rgba(225, 40, 40, 0.18); }
+    .reader-resize-handle::after {
+      content: ""; position: absolute; left: 4px; top: 50%;
+      transform: translateY(-50%); width: 2px; height: 52px;
+      border-radius: 2px; background: rgba(255,255,255,.22);
+      transition: background .15s ease;
+    }
+    .reader-resize-handle:hover::after,
+    .reader-resize-handle.dragging::after { background: rgba(225, 40, 40, .75); }
+  }
+  @media (max-width: 720px) {
+    .reader-resize-handle { display: none; }
+  }
   .reader-overlay.open .reader { transform: translateX(0); }
   .reader-overlay.flip-enter { perspective: 1200px; }
   .reader-overlay.flip-enter .reader {
@@ -310,7 +374,7 @@
   .reader-overlay.flip-enter.open .reader { transform: rotateY(0deg); }
   @media (min-width: 721px) {
     .reader-overlay.flip-enter .reader {
-      width: min(760px, 100%); right: 0; left: auto; border-left: 1px solid var(--line);
+      width: var(--reader-width, min(760px, 100%)); right: 0; left: auto; border-left: 1px solid var(--line);
       transform: translateX(100%); transform-origin: right center;
       transition: transform .35s cubic-bezier(.2,.8,.2,1);
     }
@@ -544,7 +608,8 @@
 
 <!-- READER -->
 <div class="reader-overlay" id="readerOverlay">
-  <div class="reader">
+  <div class="reader" id="readerPanel">
+    <div class="reader-resize-handle" id="readerResizeHandle" title="Glisser pour élargir"></div>
     <div class="reader-bar">
       <button class="icon-btn" id="readerClose" title="Fermer">←</button>
       <span class="r-src" id="readerSrc"></span>
@@ -673,6 +738,44 @@
 
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   function stripTags(html) { var d = document.createElement("div"); d.innerHTML = html || ""; return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim(); }
+
+  function fullChapo(a) {
+    var full = stripTags(a.summary_html || "");
+    return full || a.excerpt || "";
+  }
+  function chapoSizeClass(text) {
+    var n = (text || "").length;
+    if (n > 800) return "chapo-xl";
+    if (n > 450) return "chapo-lg";
+    if (n > 220) return "chapo-md";
+    return "chapo-sm";
+  }
+  function resetTextwrapFlip(page) {
+    var tw = page && page.querySelector(".page-textwrap.flipped");
+    if (tw) {
+      tw.classList.remove("flipped");
+      var inner = tw.querySelector(".flip-card-inner");
+      if (inner) inner.style.minHeight = "";
+    }
+  }
+  function resetAllTextwrapFlips() {
+    S.pageEls.forEach(function (p) { resetTextwrapFlip(p); });
+  }
+  function syncTextwrapFlipHeight(textwrap) {
+    var inner = textwrap.querySelector(".flip-card-inner");
+    var front = textwrap.querySelector(".flip-card-front");
+    var back = textwrap.querySelector(".flip-card-back");
+    if (!inner || !front || !back) return;
+    if (textwrap.classList.contains("flipped")) {
+      inner.style.minHeight = Math.max(front.offsetHeight, back.offsetHeight) + "px";
+    } else {
+      inner.style.minHeight = "";
+    }
+  }
+  function toggleTextwrapFlip(textwrap) {
+    textwrap.classList.toggle("flipped");
+    syncTextwrapFlipHeight(textwrap);
+  }
 
   function formatTitle(title, leadWords) {
     var words = String(title || "").trim().split(/\s+/).filter(Boolean);
@@ -987,18 +1090,30 @@
       ? '<div class="next-pill"><span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(truncatePillTitle(next.title)) + '</span></div>'
       : '<div class="next-pill at-end"><span>✓ Vous êtes à jour</span></div>';
 
+    var chapo = fullChapo(a);
+    var chapoCls = chapoSizeClass(chapo);
+
     page.innerHTML =
       '<div class="page-card">' +
         media +
         '<div class="page-shade"></div>' +
         '<div class="page-inner">' +
           '<span class="src-chip">' + esc(a.emoji) + " " + esc(a.source) + "</span>" +
-          '<div class="page-textwrap">' +
-            '<h2 class="page-title' + (String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "") + '">' + formatTitle(a.title, titleLeadCount(a.title)) + "</h2>" +
-            (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
-            '<div class="page-meta">' +
-              (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
-              "<span>" + esc(a.date || "") + "</span>" +
+          '<div class="page-textwrap ' + chapoCls + '" tabindex="0" role="button" aria-label="Retourner la carte pour lire le chapô">' +
+            '<div class="flip-card-inner">' +
+              '<div class="flip-card-front">' +
+                '<h2 class="page-title' + (String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "") + '">' + formatTitle(a.title, titleLeadCount(a.title)) + "</h2>" +
+                (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
+                '<div class="page-meta">' +
+                  (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
+                  "<span>" + esc(a.date || "") + "</span>" +
+                "</div>" +
+              "</div>" +
+              '<div class="flip-card-back">' +
+                '<p class="flip-back-label">Chapô</p>' +
+                '<p class="page-chapo-full">' + esc(chapo) + "</p>" +
+                '<span class="flip-hint">Cliquer pour revenir</span>' +
+              "</div>" +
             "</div>" +
           "</div>" +
           '<div class="page-actions">' +
@@ -1089,7 +1204,7 @@
     var trackDel = page.querySelector(".swipe-track.del");
     var hinticDel = page.querySelector(".swipe-hintic.del");
 
-    page.querySelector('[data-act="read"]').addEventListener("click", function (e) { e.stopPropagation(); openReader(a.id); });
+    page.querySelector('[data-act="read"]').addEventListener("click", function (e) { e.stopPropagation(); resetTextwrapFlip(page); openReader(a.id); });
     page.querySelector('[data-act="save"]').addEventListener("click", function (e) {
       e.stopPropagation();
       var on = toggleSaved(a.id);
@@ -1101,14 +1216,20 @@
       var i = idxOf(page); if (i + 1 < S.feed.length) goToPage(i + 1);
     });
 
-    // open reader by tapping the title/excerpt (not while dragging)
-    page.querySelector(".page-inner").addEventListener("click", function (e) {
-      if (e.target.closest(".pbtn")) return;
-      if (page._moved) return;
-      if (e.target.closest(".page-title") || e.target.closest(".page-excerpt") || e.target.closest(".src-chip")) {
-        openReader(a.id);
-      }
-    });
+    var textwrap = page.querySelector(".page-textwrap");
+    if (textwrap) {
+      textwrap.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (page._moved) return;
+        toggleTextwrapFlip(textwrap);
+      });
+      textwrap.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault(); e.stopPropagation();
+          toggleTextwrapFlip(textwrap);
+        }
+      });
+    }
 
     // ---- horizontal swipe : droite = enregistrer, gauche = supprimer ----
     var sx = 0, sy = 0, drag = false, dir = null;
@@ -1184,6 +1305,7 @@
 
   function goToPage(i) {
     i = Math.max(0, Math.min(S.pageEls.length - 1, i));
+    resetAllTextwrapFlips();
     S.current = i;
     updateBackToTop();
     pager.scrollTo({ top: i * pager.clientHeight, behavior: "smooth" });
@@ -1192,7 +1314,10 @@
 
   pager.addEventListener("scroll", function () {
     var i = Math.round(pager.scrollTop / pager.clientHeight);
-    if (i !== S.current) { S.current = i; loadAround(i); updateBackToTop(); }
+    if (i !== S.current) {
+      resetAllTextwrapFlips();
+      S.current = i; loadAround(i); updateBackToTop();
+    }
     onContentScroll(pager.scrollTop);
   });
   savedWrap.addEventListener("scroll", function () { onContentScroll(savedWrap.scrollTop); });
@@ -1304,6 +1429,57 @@
 
   // ---------- READER ----------
   var overlay = document.getElementById("readerOverlay");
+  var readerPanel = document.getElementById("readerPanel");
+  var resizeHandle = document.getElementById("readerResizeHandle");
+  var READER_WIDTH_KEY = "flip_reader_width_v1";
+  var MIN_READER_W = 420;
+  var MAX_READER_RATIO = 0.92;
+
+  function applyReaderWidth(w) {
+    if (!readerPanel) return w;
+    var maxW = Math.floor(window.innerWidth * MAX_READER_RATIO);
+    w = Math.max(MIN_READER_W, Math.min(maxW, w));
+    readerPanel.style.setProperty("--reader-width", w + "px");
+    try { localStorage.setItem(READER_WIDTH_KEY, String(w)); } catch (e) {}
+    return w;
+  }
+  function loadReaderWidth() {
+    try {
+      var saved = parseInt(localStorage.getItem(READER_WIDTH_KEY), 10);
+      if (!isNaN(saved) && saved >= MIN_READER_W) applyReaderWidth(saved);
+    } catch (e) {}
+  }
+  loadReaderWidth();
+
+  if (resizeHandle && readerPanel) {
+    resizeHandle.addEventListener("pointerdown", function (e) {
+      if (window.innerWidth < 721) return;
+      e.preventDefault();
+      resizeHandle.classList.add("dragging");
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+      var startX = e.clientX;
+      var startW = readerPanel.getBoundingClientRect().width;
+      function onMove(ev) {
+        applyReaderWidth(startW + (startX - ev.clientX));
+      }
+      function onUp() {
+        resizeHandle.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      }
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+  }
+  window.addEventListener("resize", function () {
+    if (!readerPanel) return;
+    var cur = readerPanel.getBoundingClientRect().width;
+    applyReaderWidth(cur);
+  });
+
   var rHero = document.getElementById("readerHero");
   var rSrc = document.getElementById("readerSrc");
   var rTitle = document.getElementById("readerTitle");
