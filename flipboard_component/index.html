@@ -147,15 +147,8 @@
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 18px; padding: 18px 24px 20px; margin-bottom: 18px;
     cursor: pointer; perspective: 1200px;
-    transition: max-width .35s ease, padding .35s ease;
   }
   .page.noimg .page-textwrap { background: rgba(8, 8, 11, 0.22); border-color: transparent; }
-  .page-textwrap.flipped { max-width: min(920px, 96%); }
-  .page-textwrap.show-back { max-width: min(920px, 96%); }
-  .page-textwrap.chapo-lg.flipped,
-  .page-textwrap.chapo-xl.flipped,
-  .page-textwrap.chapo-lg.show-back,
-  .page-textwrap.chapo-xl.show-back { padding: 20px 26px 22px; }
 
   .flip-card-inner {
     position: relative; transform-style: preserve-3d;
@@ -170,45 +163,13 @@
   .flip-card-back {
     position: absolute; top: 0; left: 0; right: 0;
     transform: rotateY(180deg);
-    display: flex; flex-direction: column; justify-content: flex-start;
   }
-  /* Après l'animation : affichage plat du verso (fiable sur tous les navigateurs) */
   .page-textwrap.show-back .flip-card-inner {
     transform: none; transform-style: flat;
   }
   .page-textwrap.show-back .flip-card-front { display: none; }
   .page-textwrap.show-back .flip-card-back {
     position: relative; transform: none;
-  }
-
-  .flip-card-back-scroll {
-    flex: 1 1 auto; min-height: 72px;
-    max-height: min(58vh, 520px);
-    overflow-x: hidden; overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255,255,255,.28) transparent;
-    padding-right: 6px; margin-right: -2px;
-    touch-action: pan-y;
-  }
-  .flip-card-back-scroll::-webkit-scrollbar { width: 7px; }
-  .flip-card-back-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.22); border-radius: 4px; }
-
-  .page-chapo-full {
-    margin: 0; color: #ececee; line-height: 1.58;
-    font-size: clamp(16px, 1.65vw, 21px);
-  }
-  .page-textwrap.chapo-md .page-chapo-full { font-size: clamp(15px, 1.55vw, 19.5px); line-height: 1.55; }
-  .page-textwrap.chapo-lg .page-chapo-full { font-size: clamp(14.5px, 1.45vw, 18px); line-height: 1.52; }
-  .page-textwrap.chapo-xl .page-chapo-full { font-size: clamp(14px, 1.35vw, 17px); line-height: 1.5; }
-  .flip-back-label {
-    margin: 0 0 10px; color: var(--accent); font-size: 11px; font-weight: 800;
-    letter-spacing: .55px; text-transform: uppercase; flex: 0 0 auto;
-  }
-  .flip-hint {
-    margin-top: 12px; color: #a1a1aa; font-size: 11.5px; font-weight: 600;
-    flex: 0 0 auto;
   }
 
   .src-chip {
@@ -767,12 +728,12 @@
     var full = stripTags(a.summary_html || "");
     return full || a.excerpt || "";
   }
-  function chapoSizeClass(text) {
-    var n = (text || "").length;
-    if (n > 800) return "chapo-xl";
-    if (n > 450) return "chapo-lg";
-    if (n > 220) return "chapo-md";
-    return "chapo-sm";
+  function truncateChapo(text, limite) {
+    limite = limite || 320;
+    text = String(text || "").replace(/\s+/g, " ").trim();
+    if (text.length <= limite) return text;
+    var coupe = text.slice(0, limite).replace(/\s+\S*$/, "").trim();
+    return (coupe || text.slice(0, limite)) + "…";
   }
   function resetTextwrapFlip(page) {
     var tw = page && page.querySelector(".page-textwrap");
@@ -808,14 +769,15 @@
     var inner = textwrap.querySelector(".flip-card-inner");
     var front = textwrap.querySelector(".flip-card-front");
     if (!inner || !front) return;
-    inner.style.minHeight = front.offsetHeight + "px";
+    var cardHeight = front.offsetHeight + "px";
+    inner.style.minHeight = cardHeight;
     textwrap.classList.add("is-flipping");
     void inner.offsetWidth;
     textwrap.classList.add("flipped");
     waitFlipTransition(inner, function () {
       textwrap.classList.remove("is-flipping", "flipped");
       textwrap.classList.add("show-back");
-      inner.style.minHeight = "";
+      inner.style.minHeight = cardHeight;
       inner.style.transform = "";
     });
   }
@@ -1154,8 +1116,14 @@
       ? '<div class="next-pill"><span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(truncatePillTitle(next.title)) + '</span></div>'
       : '<div class="next-pill at-end"><span>✓ Vous êtes à jour</span></div>';
 
-    var chapo = fullChapo(a);
-    var chapoCls = chapoSizeClass(chapo);
+    var chapo = truncateChapo(fullChapo(a));
+    var titleCls = String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "";
+    var titleHtml = '<h2 class="page-title' + titleCls + '">' + formatTitle(a.title, titleLeadCount(a.title)) + "</h2>";
+    var metaHtml =
+      '<div class="page-meta">' +
+        (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
+        "<span>" + esc(a.date || "") + "</span>" +
+      "</div>";
 
     page.innerHTML =
       '<div class="page-card">' +
@@ -1163,22 +1131,17 @@
         '<div class="page-shade"></div>' +
         '<div class="page-inner">' +
           '<span class="src-chip">' + esc(a.emoji) + " " + esc(a.source) + "</span>" +
-          '<div class="page-textwrap ' + chapoCls + '" tabindex="0" role="button" aria-label="Retourner la carte pour lire le chapô">' +
+          '<div class="page-textwrap" tabindex="0" role="button" aria-label="Retourner la carte pour lire le chapô">' +
             '<div class="flip-card-inner">' +
               '<div class="flip-card-front">' +
-                '<h2 class="page-title' + (String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "") + '">' + formatTitle(a.title, titleLeadCount(a.title)) + "</h2>" +
+                titleHtml +
                 (a.excerpt ? '<p class="page-excerpt">' + esc(a.excerpt) + "</p>" : "") +
-                '<div class="page-meta">' +
-                  (a.author ? "<span>" + esc(a.author) + "</span><span class='dot'></span>" : "") +
-                  "<span>" + esc(a.date || "") + "</span>" +
-                "</div>" +
+                metaHtml +
               "</div>" +
               '<div class="flip-card-back">' +
-                '<p class="flip-back-label">Chapô</p>' +
-                '<div class="flip-card-back-scroll">' +
-                  '<p class="page-chapo-full">' + esc(chapo) + "</p>" +
-                "</div>" +
-                '<span class="flip-hint">Cliquer pour revenir · faites défiler pour lire la suite</span>' +
+                titleHtml +
+                (chapo ? '<p class="page-excerpt">' + esc(chapo) + "</p>" : "") +
+                metaHtml +
               "</div>" +
             "</div>" +
           "</div>" +
@@ -1284,15 +1247,7 @@
 
     var textwrap = page.querySelector(".page-textwrap");
     if (textwrap) {
-      var backScroll = textwrap.querySelector(".flip-card-back-scroll");
-      if (backScroll) {
-        backScroll.addEventListener("wheel", function (e) { e.stopPropagation(); }, { passive: true });
-        backScroll.addEventListener("touchmove", function (e) {
-          if (backScroll.scrollHeight > backScroll.clientHeight + 2) e.stopPropagation();
-        }, { passive: true });
-      }
       textwrap.addEventListener("click", function (e) {
-        if (e.target.closest(".flip-card-back-scroll")) return;
         e.stopPropagation();
         if (page._moved) return;
         toggleTextwrapFlip(textwrap);
