@@ -148,41 +148,37 @@
     border-radius: 18px; padding: 18px 24px 20px; margin-bottom: 18px;
     cursor: pointer; perspective: 1200px;
     transition: max-width .35s ease, padding .35s ease;
-    overflow: hidden;
   }
   .page.noimg .page-textwrap { background: rgba(8, 8, 11, 0.22); border-color: transparent; }
   .page-textwrap.flipped { max-width: min(920px, 96%); }
+  .page-textwrap.show-back { max-width: min(920px, 96%); }
   .page-textwrap.chapo-lg.flipped,
-  .page-textwrap.chapo-xl.flipped { padding: 20px 26px 22px; }
+  .page-textwrap.chapo-xl.flipped,
+  .page-textwrap.chapo-lg.show-back,
+  .page-textwrap.chapo-xl.show-back { padding: 20px 26px 22px; }
 
   .flip-card-inner {
     position: relative; transform-style: preserve-3d;
-    transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1), min-height 0.35s ease;
-    overflow: hidden;
+    transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1);
   }
-  .page-textwrap.flipped .flip-card-inner { transform: rotateY(180deg); }
+  .page-textwrap.is-flipping.flipped .flip-card-inner { transform: rotateY(180deg); }
+  .page-textwrap.is-flipping:not(.flipped) .flip-card-inner { transform: rotateY(0deg); }
   .flip-card-front, .flip-card-back {
     backface-visibility: hidden; -webkit-backface-visibility: hidden;
-    -moz-backface-visibility: hidden;
-    transform-style: preserve-3d;
   }
-  .flip-card-front {
-    transform: rotateY(0deg) translateZ(2px);
-    background: rgba(8, 8, 11, 0.55);
-  }
+  .flip-card-front { transform: rotateY(0deg); }
   .flip-card-back {
-    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-    transform: rotateY(180deg) translateZ(2px);
+    position: absolute; top: 0; left: 0; right: 0;
+    transform: rotateY(180deg);
     display: flex; flex-direction: column; justify-content: flex-start;
-    background: rgba(8, 8, 11, 0.55);
-    overflow: hidden;
   }
-  .page.noimg .flip-card-front,
-  .page.noimg .flip-card-back { background: rgba(8, 8, 11, 0.35); }
-  /* Firefox : masquer la face inactive hors animation pour éviter la superposition */
-  .page-textwrap:not(.is-flipping):not(.flipped) .flip-card-back,
-  .page-textwrap:not(.is-flipping).flipped .flip-card-front {
-    visibility: hidden; pointer-events: none;
+  /* Après l'animation : affichage plat du verso (fiable sur tous les navigateurs) */
+  .page-textwrap.show-back .flip-card-inner {
+    transform: none; transform-style: flat;
+  }
+  .page-textwrap.show-back .flip-card-front { display: none; }
+  .page-textwrap.show-back .flip-card-back {
+    position: relative; transform: none;
   }
 
   .flip-card-back-scroll {
@@ -779,52 +775,70 @@
     return "chapo-sm";
   }
   function resetTextwrapFlip(page) {
-    var tw = page && page.querySelector(".page-textwrap.flipped, .page-textwrap.is-flipping");
-    if (tw) {
-      tw.classList.remove("flipped", "is-flipping");
-      var inner = tw.querySelector(".flip-card-inner");
-      if (inner) inner.style.minHeight = "";
+    var tw = page && page.querySelector(".page-textwrap");
+    if (!tw) return;
+    if (!tw.classList.contains("flipped") && !tw.classList.contains("show-back") && !tw.classList.contains("is-flipping")) return;
+    tw.classList.remove("flipped", "is-flipping", "show-back");
+    var inner = tw.querySelector(".flip-card-inner");
+    if (inner) {
+      inner.style.minHeight = "";
+      inner.style.transition = "";
+      inner.style.transform = "";
     }
   }
   function resetAllTextwrapFlips() {
     S.pageEls.forEach(function (p) { resetTextwrapFlip(p); });
   }
-  function syncTextwrapFlipHeight(textwrap) {
-    var inner = textwrap.querySelector(".flip-card-inner");
-    var front = textwrap.querySelector(".flip-card-front");
-    var back = textwrap.querySelector(".flip-card-back");
-    if (!inner || !front || !back) return;
-    if (textwrap.classList.contains("flipped")) {
-      inner.style.minHeight = Math.max(front.offsetHeight, back.offsetHeight) + "px";
-    } else {
-      inner.style.minHeight = "";
-    }
-  }
-  function finishTextwrapFlip(textwrap) {
-    if (!textwrap.classList.contains("is-flipping")) return;
-    textwrap.classList.remove("is-flipping");
-    syncTextwrapFlipHeight(textwrap);
-  }
-  function toggleTextwrapFlip(textwrap) {
-    textwrap.classList.add("is-flipping");
-    textwrap.classList.toggle("flipped");
-    syncTextwrapFlipHeight(textwrap);
-    var inner = textwrap.querySelector(".flip-card-inner");
-    if (!inner) { finishTextwrapFlip(textwrap); return; }
+  function waitFlipTransition(inner, onDone) {
     var done = false;
-    function onEnd(ev) {
-      if (done || ev.propertyName !== "transform") return;
-      done = true;
-      inner.removeEventListener("transitionend", onEnd);
-      finishTextwrapFlip(textwrap);
-    }
-    inner.addEventListener("transitionend", onEnd);
-    setTimeout(function () {
+    function finish() {
       if (done) return;
       done = true;
       inner.removeEventListener("transitionend", onEnd);
-      finishTextwrapFlip(textwrap);
-    }, 520);
+      onDone();
+    }
+    function onEnd(ev) {
+      if (ev.propertyName !== "transform") return;
+      finish();
+    }
+    inner.addEventListener("transitionend", onEnd);
+    setTimeout(finish, 520);
+  }
+  function flipToBack(textwrap) {
+    var inner = textwrap.querySelector(".flip-card-inner");
+    var front = textwrap.querySelector(".flip-card-front");
+    if (!inner || !front) return;
+    inner.style.minHeight = front.offsetHeight + "px";
+    textwrap.classList.add("is-flipping");
+    void inner.offsetWidth;
+    textwrap.classList.add("flipped");
+    waitFlipTransition(inner, function () {
+      textwrap.classList.remove("is-flipping", "flipped");
+      textwrap.classList.add("show-back");
+      inner.style.minHeight = "";
+      inner.style.transform = "";
+    });
+  }
+  function flipToFront(textwrap) {
+    var inner = textwrap.querySelector(".flip-card-inner");
+    if (!inner) return;
+    textwrap.classList.remove("show-back");
+    textwrap.classList.add("flipped", "is-flipping");
+    inner.style.transition = "none";
+    inner.style.transform = "rotateY(180deg)";
+    void inner.offsetWidth;
+    inner.style.transition = "";
+    textwrap.classList.remove("flipped");
+    waitFlipTransition(inner, function () {
+      textwrap.classList.remove("is-flipping");
+      inner.style.minHeight = "";
+      inner.style.transform = "";
+    });
+  }
+  function toggleTextwrapFlip(textwrap) {
+    if (textwrap.classList.contains("is-flipping")) return;
+    if (textwrap.classList.contains("show-back")) flipToFront(textwrap);
+    else flipToBack(textwrap);
   }
 
   function formatTitle(title, leadWords) {
