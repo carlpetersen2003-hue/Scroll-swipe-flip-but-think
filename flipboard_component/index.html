@@ -161,15 +161,24 @@
   }
   .flip-card-front { transform: rotateY(0deg); }
   .flip-card-back {
-    position: absolute; top: 0; left: 0; right: 0;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
     transform: rotateY(180deg);
+    overflow: hidden;
   }
   .page-textwrap.show-back .flip-card-inner {
     transform: none; transform-style: flat;
   }
   .page-textwrap.show-back .flip-card-front { display: none; }
   .page-textwrap.show-back .flip-card-back {
-    position: relative; transform: none;
+    position: relative; transform: none; height: 100%;
+  }
+  /* Verso : chapô seul, même typo que page-excerpt, plus de lignes dans la même hauteur */
+  .page-chapo-back {
+    margin: 0; height: 100%;
+    font-size: clamp(14px, 1.4vw, 18px); line-height: 1.5; color: #e4e4e7;
+    max-width: 60ch;
+    display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+    -webkit-line-clamp: 9;
   }
 
   .src-chip {
@@ -729,11 +738,21 @@
     return full || a.excerpt || "";
   }
   function truncateChapo(text, limite) {
-    limite = limite || 320;
+    limite = limite || 560;
     text = String(text || "").replace(/\s+/g, " ").trim();
     if (text.length <= limite) return text;
     var coupe = text.slice(0, limite).replace(/\s+\S*$/, "").trim();
     return (coupe || text.slice(0, limite)) + "…";
+  }
+  function syncChapoBackClamp(textwrap) {
+    var inner = textwrap.querySelector(".flip-card-inner");
+    var chapo = textwrap.querySelector(".page-chapo-back");
+    if (!inner || !chapo) return;
+    var lh = parseFloat(getComputedStyle(chapo).lineHeight);
+    if (!lh || isNaN(lh)) lh = 24;
+    var lines = Math.max(4, Math.floor(inner.offsetHeight / lh));
+    chapo.style.webkitLineClamp = String(lines);
+    chapo.style.lineClamp = String(lines);
   }
   function resetTextwrapFlip(page) {
     var tw = page && page.querySelector(".page-textwrap");
@@ -779,6 +798,7 @@
       textwrap.classList.add("show-back");
       inner.style.minHeight = cardHeight;
       inner.style.transform = "";
+      syncChapoBackClamp(textwrap);
     });
   }
   function flipToFront(textwrap) {
@@ -1139,9 +1159,7 @@
                 metaHtml +
               "</div>" +
               '<div class="flip-card-back">' +
-                titleHtml +
-                (chapo ? '<p class="page-excerpt">' + esc(chapo) + "</p>" : "") +
-                metaHtml +
+                (chapo ? '<p class="page-chapo-back">' + esc(chapo) + "</p>" : "") +
               "</div>" +
             "</div>" +
           "</div>" +
