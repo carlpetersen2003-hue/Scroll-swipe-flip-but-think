@@ -148,6 +148,7 @@
     border-radius: 18px; padding: 18px 24px 20px; margin-bottom: 18px;
     cursor: pointer; perspective: 1200px;
     transition: max-width .35s ease, padding .35s ease;
+    overflow: hidden;
   }
   .page.noimg .page-textwrap { background: rgba(8, 8, 11, 0.22); border-color: transparent; }
   .page-textwrap.flipped { max-width: min(920px, 96%); }
@@ -157,34 +158,61 @@
   .flip-card-inner {
     position: relative; transform-style: preserve-3d;
     transition: transform 0.48s cubic-bezier(0.34, 1.08, 0.44, 1), min-height 0.35s ease;
+    overflow: hidden;
   }
   .page-textwrap.flipped .flip-card-inner { transform: rotateY(180deg); }
   .flip-card-front, .flip-card-back {
     backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    -moz-backface-visibility: hidden;
+    transform-style: preserve-3d;
+  }
+  .flip-card-front {
+    transform: rotateY(0deg) translateZ(2px);
+    background: rgba(8, 8, 11, 0.55);
   }
   .flip-card-back {
-    position: absolute; top: 0; left: 0; right: 0;
-    transform: rotateY(180deg);
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    transform: rotateY(180deg) translateZ(2px);
     display: flex; flex-direction: column; justify-content: flex-start;
+    background: rgba(8, 8, 11, 0.55);
+    overflow: hidden;
   }
+  .page.noimg .flip-card-front,
+  .page.noimg .flip-card-back { background: rgba(8, 8, 11, 0.35); }
+  /* Firefox : masquer la face inactive hors animation pour éviter la superposition */
+  .page-textwrap:not(.is-flipping):not(.flipped) .flip-card-back,
+  .page-textwrap:not(.is-flipping).flipped .flip-card-front {
+    visibility: hidden; pointer-events: none;
+  }
+
+  .flip-card-back-scroll {
+    flex: 1 1 auto; min-height: 72px;
+    max-height: min(58vh, 520px);
+    overflow-x: hidden; overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,.28) transparent;
+    padding-right: 6px; margin-right: -2px;
+    touch-action: pan-y;
+  }
+  .flip-card-back-scroll::-webkit-scrollbar { width: 7px; }
+  .flip-card-back-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.22); border-radius: 4px; }
+
   .page-chapo-full {
-    margin: 0; color: #ececee; line-height: 1.55;
-    font-size: clamp(14px, 1.4vw, 18px);
+    margin: 0; color: #ececee; line-height: 1.58;
+    font-size: clamp(16px, 1.65vw, 21px);
   }
-  .page-textwrap.chapo-md .page-chapo-full { font-size: clamp(13px, 1.25vw, 16.5px); line-height: 1.5; }
-  .page-textwrap.chapo-lg .page-chapo-full { font-size: clamp(12px, 1.15vw, 15px); line-height: 1.45; }
-  .page-textwrap.chapo-xl .page-chapo-full {
-    font-size: clamp(11px, 1.05vw, 14px); line-height: 1.42;
-    max-height: min(52vh, 420px); overflow-y: auto; padding-right: 4px;
-  }
-  .page-chapo-full::-webkit-scrollbar { width: 6px; }
-  .page-chapo-full::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 4px; }
+  .page-textwrap.chapo-md .page-chapo-full { font-size: clamp(15px, 1.55vw, 19.5px); line-height: 1.55; }
+  .page-textwrap.chapo-lg .page-chapo-full { font-size: clamp(14.5px, 1.45vw, 18px); line-height: 1.52; }
+  .page-textwrap.chapo-xl .page-chapo-full { font-size: clamp(14px, 1.35vw, 17px); line-height: 1.5; }
   .flip-back-label {
     margin: 0 0 10px; color: var(--accent); font-size: 11px; font-weight: 800;
-    letter-spacing: .55px; text-transform: uppercase;
+    letter-spacing: .55px; text-transform: uppercase; flex: 0 0 auto;
   }
   .flip-hint {
     margin-top: 12px; color: #a1a1aa; font-size: 11.5px; font-weight: 600;
+    flex: 0 0 auto;
   }
 
   .src-chip {
@@ -751,9 +779,9 @@
     return "chapo-sm";
   }
   function resetTextwrapFlip(page) {
-    var tw = page && page.querySelector(".page-textwrap.flipped");
+    var tw = page && page.querySelector(".page-textwrap.flipped, .page-textwrap.is-flipping");
     if (tw) {
-      tw.classList.remove("flipped");
+      tw.classList.remove("flipped", "is-flipping");
       var inner = tw.querySelector(".flip-card-inner");
       if (inner) inner.style.minHeight = "";
     }
@@ -772,9 +800,31 @@
       inner.style.minHeight = "";
     }
   }
+  function finishTextwrapFlip(textwrap) {
+    if (!textwrap.classList.contains("is-flipping")) return;
+    textwrap.classList.remove("is-flipping");
+    syncTextwrapFlipHeight(textwrap);
+  }
   function toggleTextwrapFlip(textwrap) {
+    textwrap.classList.add("is-flipping");
     textwrap.classList.toggle("flipped");
     syncTextwrapFlipHeight(textwrap);
+    var inner = textwrap.querySelector(".flip-card-inner");
+    if (!inner) { finishTextwrapFlip(textwrap); return; }
+    var done = false;
+    function onEnd(ev) {
+      if (done || ev.propertyName !== "transform") return;
+      done = true;
+      inner.removeEventListener("transitionend", onEnd);
+      finishTextwrapFlip(textwrap);
+    }
+    inner.addEventListener("transitionend", onEnd);
+    setTimeout(function () {
+      if (done) return;
+      done = true;
+      inner.removeEventListener("transitionend", onEnd);
+      finishTextwrapFlip(textwrap);
+    }, 520);
   }
 
   function formatTitle(title, leadWords) {
@@ -1111,8 +1161,10 @@
               "</div>" +
               '<div class="flip-card-back">' +
                 '<p class="flip-back-label">Chapô</p>' +
-                '<p class="page-chapo-full">' + esc(chapo) + "</p>" +
-                '<span class="flip-hint">Cliquer pour revenir</span>' +
+                '<div class="flip-card-back-scroll">' +
+                  '<p class="page-chapo-full">' + esc(chapo) + "</p>" +
+                "</div>" +
+                '<span class="flip-hint">Cliquer pour revenir · faites défiler pour lire la suite</span>' +
               "</div>" +
             "</div>" +
           "</div>" +
@@ -1218,7 +1270,15 @@
 
     var textwrap = page.querySelector(".page-textwrap");
     if (textwrap) {
+      var backScroll = textwrap.querySelector(".flip-card-back-scroll");
+      if (backScroll) {
+        backScroll.addEventListener("wheel", function (e) { e.stopPropagation(); }, { passive: true });
+        backScroll.addEventListener("touchmove", function (e) {
+          if (backScroll.scrollHeight > backScroll.clientHeight + 2) e.stopPropagation();
+        }, { passive: true });
+      }
       textwrap.addEventListener("click", function (e) {
+        if (e.target.closest(".flip-card-back-scroll")) return;
         e.stopPropagation();
         if (page._moved) return;
         toggleTextwrapFlip(textwrap);
