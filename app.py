@@ -95,13 +95,57 @@ Article :
 # FLUX RSS (inchangés)
 # ==============================
 
-RSS_FEEDS = {
-    "🧠 La Vie des Idées": "https://laviedesidees.fr/spip.php?page=backend",
-    "🌍 Diploweb": "https://www.diploweb.com/spip.php?page=backend",
-    "📚 Telos": "https://www.telos-eu.com/fr/rss.xml",
-    "📰 Institut Montaigne": "https://www.institutmontaigne.org/rss.xml",
-    "👁 Les Yeux du Monde": "https://les-yeux-du-monde.fr/feed"
+# ==============================
+# CATALOGUE FLUX RSS PAR PACKAGES
+# ==============================
+
+FEED_PACKAGES = {
+    "geopolitique": {
+        "name": "Géopolitique",
+        "emoji": "🌍",
+        "feeds": [
+            {"name": "Institut Montaigne", "emoji": "🏛️", "url": "https://www.institutmontaigne.org/rss.xml"},
+            {"name": "Telos", "emoji": "📚", "url": "https://www.telos-eu.com/fr/rss.xml"},
+            {"name": "Diploweb", "emoji": "🗺️", "url": "https://www.diploweb.com/spip.php?page=backend"},
+            {"name": "Les Yeux du Monde", "emoji": "👁", "url": "https://les-yeux-du-monde.fr/feed"},
+            {"name": "IRIS vidéos", "emoji": "🎬", "url": "https://www.iris-france.org/feed/"},
+            {"name": "Orient XXI", "emoji": "🕌", "url": "https://orientxxi.info/?page=backend&lang=fr"},
+            {"name": "Regards sur l'Est", "emoji": "🧭", "url": "https://regard-est.com/feed"},
+        ],
+    },
+    "litterature_philosophie": {
+        "name": "Littérature et Philosophie",
+        "emoji": "📖",
+        "feeds": [
+            {"name": "La Vie des idées", "emoji": "🧠", "url": "https://laviedesidees.fr/spip.php?page=backend"},
+            {"name": "Philomédia", "emoji": "💭", "url": "https://www.philomedia.be/feed/"},
+            {"name": "Acta Fabula", "emoji": "📜", "url": "https://www.fabula.org/lodel/acta/backend.php?format=rss092documents"},
+        ],
+    },
+    "economie": {
+        "name": "Économie",
+        "emoji": "💶",
+        "feeds": [
+            {"name": "Institut Choiseul", "emoji": "💼", "url": "https://www.choiseul.info/feed"},
+            {"name": "CEPII / OFCE", "emoji": "📊", "url": "https://www.cepii.fr/CEPII/rss/RSSLettre.asp"},
+            {"name": "Observatoire des inégalités", "emoji": "⚖️", "url": "https://www.inegalites.fr/spip.php?page=backend"},
+            {"name": "Le cercle des économistes", "emoji": "📈", "url": "https://lecercledeseconomistes.fr/feed/"},
+        ],
+    },
+    "environnement_societe": {
+        "name": "Environnement et société",
+        "emoji": "🌱",
+        "feeds": [
+            {"name": "Terra Nova", "emoji": "🌍", "url": "https://tnova.fr/feed"},
+            {"name": "Institut Jean Jaurès", "emoji": "✊", "url": "https://www.jean-jaures.org/publication/feed/"},
+            {"name": "IDDRI", "emoji": "🌿", "url": "https://www.iddri.org/rss.xml"},
+            {"name": "Fondapol", "emoji": "🏢", "url": "https://www.fondapol.org/feed"},
+        ],
+    },
 }
+
+DEFAULT_ACTIVE_PACKAGES = ["geopolitique"]
+MAX_ACTIVE_PACKAGES = 2
 
 NOTEBOOKLM_URL = "https://notebooklm.google.com"
 
@@ -284,29 +328,57 @@ def _article_depuis_entry(entry, nom, emoji, i):
     return art
 
 
-def _default_feeds_payload():
-    """Flux RSS intégrés à l'application (modifiables par l'utilisateur)."""
+def _packages_payload():
+    """Catalogue complet pour le composant front."""
+    out = []
+    for pkg_id, pkg in FEED_PACKAGES.items():
+        out.append({
+            "id": pkg_id,
+            "name": pkg["name"],
+            "emoji": pkg["emoji"],
+            "feeds": pkg["feeds"],
+        })
+    return out
+
+
+def _normalize_active_packages(active_packages):
+    valid = [p for p in (active_packages or []) if p in FEED_PACKAGES]
+    if not valid:
+        valid = DEFAULT_ACTIVE_PACKAGES.copy()
+    return valid[:MAX_ACTIVE_PACKAGES]
+
+
+def _feeds_from_packages(active_packages, disabled=None):
+    """Flux issus des packages actifs, hors flux désactivés individuellement."""
+    disabled = set(disabled or [])
     feeds = []
-    for label, url in RSS_FEEDS.items():
-        emoji, nom = _split_emoji(label)
-        feeds.append({"url": url, "name": nom, "emoji": emoji})
+    seen = set()
+    for pkg_id in _normalize_active_packages(active_packages):
+        for f in FEED_PACKAGES[pkg_id]["feeds"]:
+            url = f["url"]
+            if url in disabled or url in seen:
+                continue
+            seen.add(url)
+            feeds.append(f)
     return feeds
 
 
-def _lister_sources(custom_feeds, disabled_defaults=None):
-    """Liste des médias disponibles pour le filtre (flux par défaut + personnalisés)."""
-    disabled = set(disabled_defaults or [])
+def _lister_sources(active_packages, custom_feeds, disabled=None):
+    """Médias visibles dans Filtrer (packages actifs + flux perso uniquement)."""
+    disabled = set(disabled or [])
     sources = []
     seen = set()
-    for label, url in RSS_FEEDS.items():
-        if url in disabled:
-            continue
-        emoji, nom = _split_emoji(label)
+    for f in _feeds_from_packages(active_packages, disabled):
+        emoji = f.get("emoji") or "📰"
+        nom = f.get("name") or "Source"
         key = f"{emoji}|{nom}"
         if key not in seen:
             seen.add(key)
             sources.append({"key": key, "name": nom, "emoji": emoji})
     for f in custom_feeds or []:
+        url = (f.get("url") or "").strip()
+        if not url or url in disabled:
+            continue
         emoji = (f.get("emoji") or "📰").strip() or "📰"
         nom = (f.get("name") or "Source").strip()
         key = f"{emoji}|{nom}"
@@ -316,8 +388,7 @@ def _lister_sources(custom_feeds, disabled_defaults=None):
     return sources
 
 
-def _feeds_cache_key(custom_feeds, disabled_defaults=None):
-    """Clé de cache stable pour la configuration des flux."""
+def _feeds_cache_key(custom_feeds, disabled=None, active_packages=None):
     normalized = []
     for f in custom_feeds or []:
         normalized.append({
@@ -327,7 +398,8 @@ def _feeds_cache_key(custom_feeds, disabled_defaults=None):
         })
     payload = {
         "custom": sorted(normalized, key=lambda f: f.get("url", "")),
-        "disabled": sorted(set(disabled_defaults or [])),
+        "disabled": sorted(set(disabled or [])),
+        "active_packages": sorted(_normalize_active_packages(active_packages)),
     }
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
@@ -338,6 +410,7 @@ def collecter_articles(feeds_key=""):
     par_flux = []
     disabled = set()
     custom_feeds = []
+    active_packages = DEFAULT_ACTIVE_PACKAGES.copy()
 
     try:
         parsed = json.loads(feeds_key or "{}")
@@ -346,39 +419,41 @@ def collecter_articles(feeds_key=""):
         else:
             custom_feeds = parsed.get("custom", []) or []
             disabled = set(parsed.get("disabled", []) or [])
+            active_packages = _normalize_active_packages(
+                parsed.get("active_packages") or DEFAULT_ACTIVE_PACKAGES
+            )
     except (json.JSONDecodeError, TypeError):
         custom_feeds = []
 
-    for label, url in RSS_FEEDS.items():
-        if url in disabled:
-            continue
-        emoji, nom = _split_emoji(label)
+    package_urls = set()
+    for f in _feeds_from_packages(active_packages, disabled):
+        url = f["url"]
+        package_urls.add(url)
+        name = f.get("name") or "Source"
+        emoji = f.get("emoji") or "📰"
         flux = feedparser.parse(url)
         articles_flux = []
         for i, entry in enumerate(flux.entries):
-            art = _article_depuis_entry(entry, nom, emoji, i)
+            art = _article_depuis_entry(entry, name, emoji, i)
             if art:
                 articles_flux.append(art)
         if articles_flux:
             par_flux.append(articles_flux)
 
-    try:
-        for f in custom_feeds:
-            url = (f.get("url") or "").strip()
-            name = (f.get("name") or "Source").strip()
-            emoji = (f.get("emoji") or "📰").strip() or "📰"
-            if not url:
-                continue
-            flux = feedparser.parse(url)
-            articles_flux = []
-            for i, entry in enumerate(flux.entries):
-                art = _article_depuis_entry(entry, name, emoji, i)
-                if art:
-                    articles_flux.append(art)
-            if articles_flux:
-                par_flux.append(articles_flux)
-    except (json.JSONDecodeError, TypeError):
-        pass
+    for f in custom_feeds:
+        url = (f.get("url") or "").strip()
+        name = (f.get("name") or "Source").strip()
+        emoji = (f.get("emoji") or "📰").strip() or "📰"
+        if not url or url in disabled or url in package_urls:
+            continue
+        flux = feedparser.parse(url)
+        articles_flux = []
+        for i, entry in enumerate(flux.entries):
+            art = _article_depuis_entry(entry, name, emoji, i)
+            if art:
+                articles_flux.append(art)
+        if articles_flux:
+            par_flux.append(articles_flux)
 
     # Mixage round-robin pour un rendu magazine multi-sources
     articles = []
@@ -561,12 +636,15 @@ if "last_nonce" not in st.session_state:
     st.session_state.last_nonce = None
 if "custom_feeds" not in st.session_state:
     st.session_state.custom_feeds = []
-if "disabled_default_feeds" not in st.session_state:
-    st.session_state.disabled_default_feeds = []
+if "disabled_feeds" not in st.session_state:
+    st.session_state.disabled_feeds = []
+if "active_packages" not in st.session_state:
+    st.session_state.active_packages = DEFAULT_ACTIVE_PACKAGES.copy()
 
 feeds_key = _feeds_cache_key(
     st.session_state.custom_feeds,
-    st.session_state.disabled_default_feeds,
+    st.session_state.disabled_feeds,
+    st.session_state.active_packages,
 )
 articles = collecter_articles(feeds_key)
 index = {a["id"]: a for a in articles}
@@ -576,11 +654,13 @@ enrichments = {
     "summary": st.session_state.enrich_summary,
     "notebooklm": NOTEBOOKLM_URL,
     "custom_feeds": st.session_state.custom_feeds,
-    "default_feeds": _default_feeds_payload(),
-    "disabled_default_feeds": st.session_state.disabled_default_feeds,
+    "feed_packages": _packages_payload(),
+    "active_packages": st.session_state.active_packages,
+    "disabled_feeds": st.session_state.disabled_feeds,
     "sources": _lister_sources(
+        st.session_state.active_packages,
         st.session_state.custom_feeds,
-        st.session_state.disabled_default_feeds,
+        st.session_state.disabled_feeds,
     ),
 }
 
@@ -592,13 +672,21 @@ if isinstance(valeur, dict) and valeur.get("nonce") != st.session_state.last_non
 
     if valeur.get("action") == "feeds":
         new_feeds = valeur.get("feeds") or []
-        new_disabled = valeur.get("disabled_defaults") or []
+        new_disabled = valeur.get("disabled_feeds")
+        if new_disabled is None:
+            new_disabled = valeur.get("disabled_defaults") or []
+        new_packages = _normalize_active_packages(
+            valeur.get("active_packages") or DEFAULT_ACTIVE_PACKAGES
+        )
         changed = False
         if new_feeds != st.session_state.custom_feeds:
             st.session_state.custom_feeds = new_feeds
             changed = True
-        if new_disabled != st.session_state.disabled_default_feeds:
-            st.session_state.disabled_default_feeds = new_disabled
+        if new_disabled != st.session_state.disabled_feeds:
+            st.session_state.disabled_feeds = new_disabled
+            changed = True
+        if new_packages != st.session_state.active_packages:
+            st.session_state.active_packages = new_packages
             changed = True
         if changed:
             collecter_articles.clear()
