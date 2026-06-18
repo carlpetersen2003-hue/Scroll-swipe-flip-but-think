@@ -148,6 +148,12 @@ FEED_PACKAGES = {
             {"name": "OpenEdition Lectures", "emoji": "📚", "url": "https://journals.openedition.org/lectures/backend?format=rssdocuments&idcontainer=171"},
         ],
     },
+    "custom_feed": {
+        "name": "Créer mon propre feed",
+        "emoji": "✨",
+        "feeds": [],
+        "custom": True,
+    },
 }
 
 DEFAULT_ACTIVE_PACKAGES = ["geopolitique"]
@@ -173,21 +179,86 @@ def _split_emoji(label):
     return "📰", label
 
 
+def _url_image_absolue(src, base_url=""):
+    """Normalise une URL d'image (relative → absolue) et filtre les pixels de tracking."""
+    if not src or not str(src).strip():
+        return None
+    src = str(src).strip()
+    if src.startswith("data:"):
+        return None
+    abs_url = urljoin(base_url or "", src)
+    if not abs_url.startswith("http"):
+        return None
+    low = abs_url.lower()
+    if any(x in low for x in ("pixel", "spacer", "1x1", "blank.gif", "tracking", "beacon")):
+        return None
+    return abs_url
+
+
+def _images_depuis_html(html_blob, base_url=""):
+    """Liste d'images trouvées dans un bloc HTML (corps d'article RSS ou page)."""
+    if not html_blob:
+        return []
+    soup = BeautifulSoup(html_blob, "html.parser")
+    out = []
+    seen = set()
+    for img in soup.find_all("img"):
+        for attr in ("src", "data-src", "data-lazy-src", "data-original", "data-srcset"):
+            val = img.get(attr)
+            if not val:
+                continue
+            if attr == "data-srcset":
+                val = val.split(",")[0].strip().split()[0]
+            url = _url_image_absolue(val, base_url)
+            if url and url not in seen:
+                seen.add(url)
+                out.append(url)
+            break
+    return out
+
+
+def _extraire_logo_site(soup, base_url):
+    """Logo ou icône du site en dernier recours."""
+    for sel, attr in (
+        ('link[rel="apple-touch-icon"]', "href"),
+        ('link[rel="icon"][sizes="192x192"]', "href"),
+        ('link[rel="icon"][sizes="512x512"]', "href"),
+        ('link[rel="icon"]', "href"),
+        ('link[rel="shortcut icon"]', "href"),
+        ('meta[property="og:logo"]', "content"),
+        ('meta[name="msapplication-TileImage"]', "content"),
+    ):
+        el = soup.select_one(sel)
+        if el and el.get(attr):
+            url = _url_image_absolue(el.get(attr), base_url)
+            if url:
+                return url
+    for img in soup.select(
+        "header img.logo, header .logo img, .site-logo img, #logo img, "
+        "a.logo img, .custom-logo, .navbar-brand img"
+    ):
+        url = _url_image_absolue(img.get("src") or img.get("data-src"), base_url)
+        if url:
+            return url
+    return None
+
+
 def _extraire_image(entry):
     """Trouve la meilleure image disponible pour un article de flux."""
+    base = entry.get("link", "") or ""
     candidats = []
 
     for enc in entry.get("enclosures", []) or []:
         href = enc.get("href") or enc.get("url")
         if href and ("image" in (enc.get("type", "") or "")
-                     or re.search(r"\.(jpe?g|png|webp|gif)", href, re.I)):
+                     or re.search(r"\.(jpe?g|png|webp|gif|svg)", href, re.I)):
             candidats.append(href)
 
     for link in entry.get("links", []) or []:
         if link.get("rel") == "enclosure":
             href = link.get("href")
             if href and ("image" in (link.get("type", "") or "")
-                         or re.search(r"\.(jpe?g|png|webp|gif)", href, re.I)):
+                         or re.search(r"\.(jpe?g|png|webp|gif|svg)", href, re.I)):
                 candidats.append(href)
 
     for media in (entry.get("media_content") or []):
@@ -197,21 +268,18 @@ def _extraire_image(entry):
         if thumb.get("url"):
             candidats.append(thumb["url"])
 
-    html_blob = ""
+    html_parts = []
     if entry.get("content"):
-        html_blob += entry["content"][0].get("value", "")
-    html_blob += entry.get("summary", "")
-    if html_blob:
-        soup = BeautifulSoup(html_blob, "html.parser")
-        img = soup.find("img")
-        if img:
-            src = img.get("src") or img.get("data-src")
-            if src:
-                candidats.append(src)
+        for block in entry["content"]:
+            html_parts.append(block.get("value", "") or "")
+    html_parts.append(entry.get("summary", "") or "")
+    for html_blob in html_parts:
+        candidats.extend(_images_depuis_html(html_blob, base))
 
     for src in candidats:
-        if src and src.startswith("http"):
-            return src
+        url = _url_image_absolue(src, base) or (src if str(src).startswith("http") else None)
+        if url:
+            return url
     return None
 
 
@@ -248,6 +316,8 @@ def _metadonnees_page(url):
     try:
         response = requests.get(url, headers=REQUEST_HEADERS, timeout=12)
         response.raise_for_status()
+        if _page_est_bloquee(response.text):
+            return {"title": "", "image": None}
         soup = BeautifulSoup(response.text, "html.parser")
 
         titre = None
@@ -271,20 +341,34 @@ def _metadonnees_page(url):
             'meta[property="og:image"]',
             'meta[property="og:image:url"]',
             'meta[name="twitter:image"]',
+            'meta[name="twitter:image:src"]',
         ):
             el = soup.select_one(sel)
             if el and el.get("content"):
-                image = urljoin(url, el["content"].strip())
-                if image.startswith("http"):
+                image = _url_image_absolue(el["content"], url)
+                if image:
                     break
 
         if not image:
-            for img in soup.select("article img, main img, .post-content img, .entry-content img"):
-                src = img.get("src") or img.get("data-src")
-                if src:
-                    image = urljoin(url, src.strip())
-                    if image.startswith("http"):
+            for sel in (
+                "article img",
+                "main img",
+                ".texte img",
+                "#text-content img",
+                ".entry-content img",
+                ".post-content img",
+                ".article-body img",
+                "[itemprop=articleBody] img",
+            ):
+                for img in soup.select(sel):
+                    image = _url_image_absolue(img.get("src") or img.get("data-src"), url)
+                    if image:
                         break
+                if image:
+                    break
+
+        if not image:
+            image = _extraire_logo_site(soup, url)
 
         return {"title": titre or "", "image": image}
     except Exception:
@@ -295,13 +379,15 @@ def _enrichir_metadonnees(article):
     """Scraping léger si le flux RSS n'a pas de titre ou d'image."""
     if not article.get("link"):
         return article
-    if not _titre_incomplet(article.get("title")) and article.get("image"):
+    needs_title = _titre_incomplet(article.get("title"))
+    needs_image = not article.get("image")
+    if not needs_title and not needs_image:
         return article
 
     meta = _metadonnees_page(article["link"])
-    if _titre_incomplet(article.get("title")) and meta.get("title"):
+    if needs_title and meta.get("title"):
         article["title"] = meta["title"]
-    if not article.get("image") and meta.get("image"):
+    if needs_image and meta.get("image"):
         article["image"] = meta["image"]
     return article
 
@@ -313,6 +399,11 @@ def _article_depuis_entry(entry, nom, emoji, i):
     summary_html = entry.get("summary", "")
     body_html = _best_feed_html(entry)
     date_txt, ts = _date_lisible(entry)
+    image = _extraire_image(entry)
+    if not image and body_html:
+        imgs = _images_depuis_html(body_html, lien)
+        if imgs:
+            image = imgs[0]
     art = {
         "id": hashlib.md5(lien.encode("utf-8")).hexdigest()[:12],
         "source": nom,
@@ -325,8 +416,8 @@ def _article_depuis_entry(entry, nom, emoji, i):
         "excerpt": _excerpt(summary_html or body_html),
         "summary_html": summary_html,
         "body_html": body_html,
-        "image": _extraire_image(entry),
-        "featured": i == 0 and bool(_extraire_image(entry)),
+        "image": image,
+        "featured": i == 0 and bool(image),
     }
     art = _enrichir_metadonnees(art)
     if i == 0 and art.get("image"):
@@ -343,6 +434,7 @@ def _packages_payload():
             "name": pkg["name"],
             "emoji": pkg["emoji"],
             "feeds": pkg["feeds"],
+            "custom": bool(pkg.get("custom")),
         })
     return out
 

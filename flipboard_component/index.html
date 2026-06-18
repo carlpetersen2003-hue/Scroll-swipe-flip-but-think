@@ -309,6 +309,7 @@
     border: 1px solid var(--line);
   }
   .pkg-row.on { border-color: rgba(225,40,40,.45); background: var(--accent-soft); }
+  .pkg-row.custom.on { border-color: rgba(120,180,255,.45); background: rgba(80,140,255,.08); }
   .pkg-emoji { font-size: 26px; flex: 0 0 auto; }
   .pkg-body { flex: 1 1 auto; min-width: 0; }
   .pkg-name { font-weight: 800; font-size: 14.5px; margin-bottom: 2px; }
@@ -633,7 +634,7 @@
     <div class="pager" id="pager" tabindex="0"></div>
     <div class="filter-wrap" id="filterWrap"><div class="filter-list" id="filterList"></div></div>
     <div class="personalize-wrap" id="personalizeWrap">
-      <p class="personalize-intro">Un seul package actif à la fois pour un chargement rapide. Le package <strong>Géopolitique</strong> est activé par défaut. Vous pouvez ensuite retirer ou ajouter des médias individuellement.</p>
+      <p class="personalize-intro">Un seul package actif à la fois pour un chargement rapide. Choisissez un catalogue ou <strong>Créer mon propre feed</strong> pour n’utiliser que vos flux RSS. Le package <strong>Géopolitique</strong> est activé par défaut.</p>
       <div class="feed-list"><h3>Packages</h3><div class="pkg-list" id="packageList"></div></div>
       <form class="feed-form" id="feedForm">
         <div class="field">
@@ -1123,10 +1124,13 @@
     box.innerHTML = S.feedPackages.map(function (pkg) {
       var on = S.activePackages.indexOf(pkg.id) !== -1;
       var n = (pkg.feeds || []).length;
-      return '<div class="pkg-row' + (on ? " on" : "") + '">' +
+      var meta = pkg.custom
+        ? "Vos flux RSS uniquement"
+        : n + " média" + (n > 1 ? "s" : "");
+      return '<div class="pkg-row' + (on ? " on" : "") + (pkg.custom ? " custom" : "") + '">' +
         '<span class="pkg-emoji">' + esc(pkg.emoji || "📰") + "</span>" +
         '<div class="pkg-body"><div class="pkg-name">' + esc(pkg.name) + '</div>' +
-        '<div class="pkg-meta">' + n + " média" + (n > 1 ? "s" : "") + "</div></div>" +
+        '<div class="pkg-meta">' + esc(meta) + "</div></div>" +
         '<label class="toggle" title="' + (on ? "Désactiver" : "Activer") + '">' +
         '<input type="checkbox" data-pkg="' + esc(pkg.id) + '"' + (on ? " checked" : "") + ">" +
         '<span class="toggle-slider"></span></label></div>';
@@ -1155,9 +1159,12 @@
 
   function renderActiveFeedList() {
     var box = document.getElementById("activeFeedList");
+    var isCustom = S.activePackages.indexOf("custom_feed") !== -1;
     var active = feedsFromActivePackages();
     if (!active.length) {
-      box.innerHTML = '<p class="feed-empty">Aucun média actif dans les packages sélectionnés.</p>';
+      box.innerHTML = isCustom
+        ? '<p class="feed-empty">Aucun flux catalogue — ajoutez vos flux RSS dans le formulaire ci-dessus.</p>'
+        : '<p class="feed-empty">Aucun média actif dans les packages sélectionnés.</p>';
       return;
     }
     box.innerHTML = active.map(function (f) {
