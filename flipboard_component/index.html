@@ -735,6 +735,7 @@
     initialized: false, openId: null, pending: {}, collapsed: false, manualBar: false,
     customFeeds: loadCustomFeeds(), disabledFeeds: loadDisabledFeeds(),
     activePackages: loadActivePackages(), feedPackages: [], feedsSynced: false,
+    hasMore: false, loadingMore: false,
   };
 
   var SRC_GRAD = {
@@ -981,6 +982,8 @@
     return out;
   }
   function applyArticles(articles) {
+    var prevCurrent = S.current;
+    var prevLen = S.articles.length;
     S.articles = articles || [];
     S.index = {};
     S.articles.forEach(function (a) { S.index[a.id] = a; });
@@ -989,6 +992,20 @@
     updateBackToTop();
     if (S.view === "filter") buildFilterView();
     if (S.view === "personalize") renderPersonalizeView();
+    if (articles.length > prevLen && prevLen > 0) {
+      goToPage(Math.min(prevCurrent, S.pageEls.length - 1));
+      if (S.loadingMore) toast("Articles suivants chargés");
+    }
+    S.loadingMore = false;
+  }
+
+  function requestLoadMore() {
+    if (!S.hasMore || S.loadingMore || S.view !== "discover") return;
+    S.loadingMore = true;
+    setValue({
+      nonce: Date.now() + "-more-" + Math.random().toString(36).slice(2),
+      action: "load_more",
+    });
   }
 
   function toast(msg) {
@@ -1077,7 +1094,7 @@
     }
   }
   document.getElementById("filterActiveEdit").addEventListener("click", function () {
-    setView("personalize");
+    setView("filter");
   });
   function validateFilterSource() {
     if (!S.filterSource) return;
@@ -1533,6 +1550,9 @@
     updateBackToTop();
     pager.scrollTo({ top: i * pager.clientHeight, behavior: "smooth" });
     loadAround(i);
+    if (S.hasMore && !S.loadingMore && i >= S.pageEls.length - 2) {
+      requestLoadMore();
+    }
   }
 
   pager.addEventListener("scroll", function () {
@@ -1540,6 +1560,9 @@
     if (i !== S.current) {
       resetAllTextwrapFlips();
       S.current = i; loadAround(i); updateBackToTop();
+    }
+    if (S.hasMore && !S.loadingMore && i >= S.pageEls.length - 2) {
+      requestLoadMore();
     }
     onContentScroll(pager.scrollTop);
   });
@@ -1974,6 +1997,9 @@
     if (args.enrichments && args.enrichments.sources) {
       S.sources = args.enrichments.sources;
       validateFilterSource();
+    }
+    if (args.enrichments && args.enrichments.has_more != null) {
+      S.hasMore = !!args.enrichments.has_more;
     }
 
     var serverFeeds = (args.enrichments && args.enrichments.custom_feeds) || [];

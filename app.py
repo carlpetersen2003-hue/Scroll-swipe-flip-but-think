@@ -4,6 +4,7 @@ import re
 import json
 import time
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urljoin
 
@@ -21,6 +22,12 @@ from mistralai import Mistral
 client = Mistral(api_key="yLoE1iD8DZpbusRDpVQ44wmyc2uIqaTx")
 
 MAX_CHARS = 12000  # Limite envoyée à Mistral
+
+# Performance : chargement par lots (12 articles / flux), cache et parallélisme
+MAX_ARTICLES_PAR_FLUX = 12
+MAX_FEED_WORKERS = 6
+MAX_IMAGE_WORKERS = 4
+FEED_CACHE_TTL = 900
 
 REQUEST_HEADERS = {
     "User-Agent": (
@@ -486,26 +493,8 @@ def _lister_sources(active_packages, custom_feeds, disabled=None):
     return sources
 
 
-def _feeds_cache_key(custom_feeds, disabled=None, active_packages=None):
-    normalized = []
-    for f in custom_feeds or []:
-        normalized.append({
-            "url": f.get("url", ""),
-            "name": f.get("name", ""),
-            "emoji": f.get("emoji", ""),
-        })
-    payload = {
-        "custom": sorted(normalized, key=lambda f: f.get("url", "")),
-        "disabled": sorted(set(disabled or [])),
-        "active_packages": sorted(_normalize_active_packages(active_packages)),
-    }
-    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
-
-
-@st.cache_data(show_spinner=False, ttl=600)
-def collecter_articles(feeds_key=""):
-    """Agrège tous les flux en une liste mixée façon magazine."""
-    par_flux = []
+def _jobs_from_feeds_key(feeds_key):
+    """Liste ordonnée des flux actifs (url, nom, emoji)."""
     disabled = set()
     custom_feeds = []
     active_packages = DEFAULT_ACTIVE_PACKAGES.copy()
@@ -524,44 +513,117 @@ def collecter_articles(feeds_key=""):
         custom_feeds = []
 
     package_urls = set()
+    jobs = []
     for f in _feeds_from_packages(active_packages, disabled):
         url = f["url"]
         package_urls.add(url)
-        name = f.get("name") or "Source"
-        emoji = f.get("emoji") or "📰"
-        flux = feedparser.parse(url)
-        articles_flux = []
-        for i, entry in enumerate(flux.entries):
-            art = _article_depuis_entry(entry, name, emoji, i)
-            if art:
-                articles_flux.append(art)
-        if articles_flux:
-            par_flux.append(articles_flux)
+        jobs.append((url, f.get("name") or "Source", f.get("emoji") or "📰"))
 
     for f in custom_feeds:
         url = (f.get("url") or "").strip()
-        name = (f.get("name") or "Source").strip()
-        emoji = (f.get("emoji") or "📰").strip() or "📰"
         if not url or url in disabled or url in package_urls:
             continue
-        flux = feedparser.parse(url)
-        articles_flux = []
-        for i, entry in enumerate(flux.entries):
-            art = _article_depuis_entry(entry, name, emoji, i)
-            if art:
-                articles_flux.append(art)
-        if articles_flux:
-            par_flux.append(articles_flux)
+        jobs.append((
+            url,
+            (f.get("name") or "Source").strip(),
+            (f.get("emoji") or "📰").strip() or "📰",
+        ))
+    return jobs
 
-    # Mixage round-robin pour un rendu magazine multi-sources
+
+def _round_robin_merge(batches):
+    if not batches:
+        return []
+    merged = []
+    max_len = max(len(b) for b in batches)
+    for i in range(max_len):
+        for batch in batches:
+            if i < len(batch):
+                merged.append(batch[i])
+    return merged
+
+
+@st.cache_data(show_spinner=False, ttl=FEED_CACHE_TTL)
+def _articles_depuis_flux(url, name, emoji, offset, limit):
+    """Lot d'articles d'un flux (cache par URL + offset). Images enrichies via scraping."""
+    try:
+        flux = feedparser.parse(url, request_headers=REQUEST_HEADERS)
+    except Exception:
+        return [], False
+    entries = list(flux.entries[offset:offset + limit])
+    has_more = len(flux.entries) > offset + limit
+    if not entries:
+        return [], has_more
+
     articles = []
-    if par_flux:
-        for i in range(max(len(f) for f in par_flux)):
-            for flux in par_flux:
-                if i < len(flux):
-                    articles.append(flux[i])
+    workers = min(MAX_IMAGE_WORKERS, len(entries))
 
-    return articles
+    def _build(entry_i):
+        entry, idx = entry_i
+        return _article_depuis_entry(entry, name, emoji, idx)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for art in pool.map(_build, [(e, offset + i) for i, e in enumerate(entries)]):
+            if art:
+                articles.append(art)
+    return articles, has_more
+
+
+def _collecter_lot(jobs, feed_offsets=None, limit=MAX_ARTICLES_PAR_FLUX):
+    """Charge un lot d'articles en parallèle et fusionne en round-robin."""
+    if not jobs:
+        return [], False, {}
+
+    offsets = dict(feed_offsets or {})
+    batches_by_url = {}
+    has_more = False
+    workers = min(MAX_FEED_WORKERS, len(jobs))
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_map = {}
+        for url, name, emoji in jobs:
+            off = offsets.get(url, 0)
+            fut = pool.submit(_articles_depuis_flux, url, name, emoji, off, limit)
+            future_map[fut] = (url, off)
+
+        for fut in as_completed(future_map):
+            url, off = future_map[fut]
+            try:
+                batch, feed_has_more = fut.result()
+            except Exception:
+                batch, feed_has_more = [], False
+            batches_by_url[url] = batch
+            offsets[url] = off + len(batch)
+            if feed_has_more:
+                has_more = True
+
+    batches = [batches_by_url.get(url, []) for url, _, _ in jobs]
+    return _round_robin_merge(batches), has_more, offsets
+
+
+def _reinitialiser_pool_articles(feeds_key):
+    jobs = _jobs_from_feeds_key(feeds_key)
+    batch, has_more, offsets = _collecter_lot(jobs, {})
+    st.session_state.articles_feeds_key = feeds_key
+    st.session_state.feed_offsets = offsets
+    st.session_state.articles_pool = batch
+    st.session_state.feeds_has_more = has_more
+
+
+def _feeds_cache_key(custom_feeds, disabled=None, active_packages=None):
+    normalized = []
+    for f in custom_feeds or []:
+        normalized.append({
+            "url": f.get("url", ""),
+            "name": f.get("name", ""),
+            "emoji": f.get("emoji", ""),
+        })
+    payload = {
+        "custom": sorted(normalized, key=lambda f: f.get("url", "")),
+        "disabled": sorted(set(disabled or [])),
+        "active_packages": sorted(_normalize_active_packages(active_packages)),
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
 def _best_feed_html(entry):
@@ -762,13 +824,25 @@ if "disabled_feeds" not in st.session_state:
     st.session_state.disabled_feeds = []
 if "active_packages" not in st.session_state:
     st.session_state.active_packages = DEFAULT_ACTIVE_PACKAGES.copy()
+if "articles_feeds_key" not in st.session_state:
+    st.session_state.articles_feeds_key = None
+if "articles_pool" not in st.session_state:
+    st.session_state.articles_pool = []
+if "feed_offsets" not in st.session_state:
+    st.session_state.feed_offsets = {}
+if "feeds_has_more" not in st.session_state:
+    st.session_state.feeds_has_more = False
 
 feeds_key = _feeds_cache_key(
     st.session_state.custom_feeds,
     st.session_state.disabled_feeds,
     st.session_state.active_packages,
 )
-articles = collecter_articles(feeds_key)
+
+if st.session_state.articles_feeds_key != feeds_key:
+    _reinitialiser_pool_articles(feeds_key)
+
+articles = st.session_state.articles_pool
 index = {a["id"]: a for a in articles}
 
 enrichments = {
@@ -779,6 +853,7 @@ enrichments = {
     "feed_packages": _packages_payload(),
     "active_packages": st.session_state.active_packages,
     "disabled_feeds": st.session_state.disabled_feeds,
+    "has_more": st.session_state.feeds_has_more,
     "sources": _lister_sources(
         st.session_state.active_packages,
         st.session_state.custom_feeds,
@@ -811,8 +886,21 @@ if isinstance(valeur, dict) and valeur.get("nonce") != st.session_state.last_non
             st.session_state.active_packages = new_packages
             changed = True
         if changed:
-            collecter_articles.clear()
+            _articles_depuis_flux.clear()
+            st.session_state.articles_feeds_key = None
             st.rerun()
+    elif valeur.get("action") == "load_more":
+        jobs = _jobs_from_feeds_key(feeds_key)
+        batch, has_more, offsets = _collecter_lot(
+            jobs, st.session_state.feed_offsets
+        )
+        if batch:
+            seen = {a["id"] for a in st.session_state.articles_pool}
+            nouveaux = [a for a in batch if a["id"] not in seen]
+            st.session_state.articles_pool.extend(nouveaux)
+        st.session_state.feed_offsets = offsets
+        st.session_state.feeds_has_more = has_more
+        st.rerun()
     elif valeur.get("id"):
         aid = valeur.get("id")
         want = valeur.get("want")
