@@ -4,6 +4,7 @@ import re
 import json
 import time
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urljoin
 
@@ -20,7 +21,12 @@ from mistralai import Mistral
 
 client = Mistral(api_key="yLoE1iD8DZpbusRDpVQ44wmyc2uIqaTx")
 
-MAX_CHARS = 12000  # Limite envoyée à Mistral
+MAX_CHARS = 8000  # Limite envoyée à Mistral (réduit pour accélérer les résumés)
+
+# Performance : limite d'articles par flux et parallélisation des requêtes RSS
+MAX_ARTICLES_PAR_FLUX = 12
+MAX_FEED_WORKERS = 6
+FEED_CACHE_TTL = 900  # 15 min — accélère relance et changement de package
 
 REQUEST_HEADERS = {
     "User-Agent": (
@@ -419,7 +425,6 @@ def _article_depuis_entry(entry, nom, emoji, i):
         "image": image,
         "featured": i == 0 and bool(image),
     }
-    art = _enrichir_metadonnees(art)
     if i == 0 and art.get("image"):
         art["featured"] = True
     return art
@@ -502,7 +507,22 @@ def _feeds_cache_key(custom_feeds, disabled=None, active_packages=None):
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
-@st.cache_data(show_spinner=False, ttl=600)
+@st.cache_data(show_spinner=False, ttl=FEED_CACHE_TTL)
+def _articles_depuis_flux(url, name, emoji):
+    """Charge et parse un flux RSS (mis en cache par URL pour les changements de package)."""
+    try:
+        flux = feedparser.parse(url, request_headers=REQUEST_HEADERS)
+    except Exception:
+        return []
+    articles = []
+    for i, entry in enumerate(flux.entries[:MAX_ARTICLES_PAR_FLUX]):
+        art = _article_depuis_entry(entry, name, emoji, i)
+        if art:
+            articles.append(art)
+    return articles
+
+
+@st.cache_data(show_spinner=False, ttl=FEED_CACHE_TTL)
 def collecter_articles(feeds_key=""):
     """Agrège tous les flux en une liste mixée façon magazine."""
     par_flux = []
@@ -524,36 +544,35 @@ def collecter_articles(feeds_key=""):
         custom_feeds = []
 
     package_urls = set()
+    jobs = []
     for f in _feeds_from_packages(active_packages, disabled):
         url = f["url"]
         package_urls.add(url)
-        name = f.get("name") or "Source"
-        emoji = f.get("emoji") or "📰"
-        flux = feedparser.parse(url)
-        articles_flux = []
-        for i, entry in enumerate(flux.entries):
-            art = _article_depuis_entry(entry, name, emoji, i)
-            if art:
-                articles_flux.append(art)
-        if articles_flux:
-            par_flux.append(articles_flux)
+        jobs.append((url, f.get("name") or "Source", f.get("emoji") or "📰"))
 
     for f in custom_feeds:
         url = (f.get("url") or "").strip()
-        name = (f.get("name") or "Source").strip()
-        emoji = (f.get("emoji") or "📰").strip() or "📰"
         if not url or url in disabled or url in package_urls:
             continue
-        flux = feedparser.parse(url)
-        articles_flux = []
-        for i, entry in enumerate(flux.entries):
-            art = _article_depuis_entry(entry, name, emoji, i)
-            if art:
-                articles_flux.append(art)
-        if articles_flux:
-            par_flux.append(articles_flux)
+        jobs.append((url, (f.get("name") or "Source").strip(), (f.get("emoji") or "📰").strip() or "📰"))
 
-    # Mixage round-robin pour un rendu magazine multi-sources
+    if not jobs:
+        return []
+
+    workers = min(MAX_FEED_WORKERS, len(jobs))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_articles_depuis_flux, url, name, emoji): url
+            for url, name, emoji in jobs
+        }
+        for future in as_completed(futures):
+            try:
+                articles_flux = future.result()
+            except Exception:
+                continue
+            if articles_flux:
+                par_flux.append(articles_flux)
+
     articles = []
     if par_flux:
         for i in range(max(len(f) for f in par_flux)):
@@ -700,8 +719,11 @@ def obtenir_paragraphes(article):
 
 @st.cache_data(show_spinner=False)
 def resume_pour_url(url, fallback_html, n_points=5):
-    texte = extraire_texte_article(url)
+    """Résumé IA : texte RSS d'abord (rapide), scraping web seulement si nécessaire."""
+    texte = nettoyer_html(fallback_html)
     if len(texte) < 800:
+        texte = extraire_texte_article(url)
+    if len(texte) < 200:
         texte = nettoyer_html(fallback_html)
     return generer_resume(texte, n_points)
 
@@ -812,6 +834,7 @@ if isinstance(valeur, dict) and valeur.get("nonce") != st.session_state.last_non
             changed = True
         if changed:
             collecter_articles.clear()
+            _articles_depuis_flux.clear()
             st.rerun()
     elif valeur.get("id"):
         aid = valeur.get("id")
