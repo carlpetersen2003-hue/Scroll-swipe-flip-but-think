@@ -229,6 +229,22 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .next-pill .lbl { color: var(--muted); }
+  .next-pill.load-more-pill { cursor: default; padding: 8px 12px; }
+  .next-pill.load-more-pill .load-more-btn {
+    border: none; background: var(--accent); color: #fff;
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    padding: 10px 20px; border-radius: 999px; cursor: pointer;
+    transition: background .15s ease, opacity .15s ease;
+  }
+  .next-pill.load-more-pill .load-more-btn:hover:not(:disabled) { background: #007bb5; }
+  .next-pill.load-more-pill .load-more-btn:disabled { opacity: .65; cursor: wait; }
+  .load-more-empty { text-align: center; }
+  .load-more-empty .load-more-btn {
+    margin-top: 16px; border: none; background: var(--accent); color: #fff;
+    font-family: inherit; font-size: 14px; font-weight: 700;
+    padding: 12px 24px; border-radius: 999px; cursor: pointer;
+  }
+  .load-more-empty .load-more-btn:disabled { opacity: .65; cursor: wait; }
   @keyframes bob { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-4px);} }
 
   /* swipe-to-save flash */
@@ -981,6 +997,7 @@
     });
     return out;
   }
+
   function applyArticles(articles) {
     var prevCurrent = S.current;
     var prevLen = S.articles.length;
@@ -999,9 +1016,49 @@
     S.loadingMore = false;
   }
 
+  function endPillContent() {
+    if (S.hasMore) {
+      var label = S.loadingMore ? "Chargement…" : "Charger plus";
+      return '<button type="button" class="load-more-btn"' +
+        (S.loadingMore ? " disabled" : "") + ">↓ " + label + "</button>";
+    }
+    return "<span>✓ Vous êtes à jour</span>";
+  }
+
+  function wireLoadMorePill(pill) {
+    if (!pill) return;
+    var btn = pill.querySelector(".load-more-btn");
+    if (!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      requestLoadMore();
+    });
+  }
+
+  function updateLastPagePill() {
+    if (!S.pageEls.length || !S.feed.length) return;
+    var i = S.feed.length - 1;
+    if (S.feed[i + 1]) return;
+    var page = S.pageEls[i];
+    if (!page) return;
+    var pill = page.querySelector(".next-pill");
+    if (!pill) return;
+    pill.classList.toggle("at-end", !S.hasMore);
+    pill.classList.toggle("load-more-pill", !!S.hasMore);
+    pill.innerHTML = endPillContent();
+    wireLoadMorePill(pill);
+  }
+
   function requestLoadMore() {
     if (!S.hasMore || S.loadingMore || S.view !== "discover") return;
     S.loadingMore = true;
+    updateLastPagePill();
+    var emptyBtn = pager.querySelector(".load-more-empty .load-more-btn");
+    if (emptyBtn) {
+      emptyBtn.disabled = true;
+      emptyBtn.textContent = "Chargement…";
+    }
     setValue({
       nonce: Date.now() + "-more-" + Math.random().toString(36).slice(2),
       action: "load_more",
@@ -1298,6 +1355,19 @@
     }
     updateFilterBar();
     if (!S.feed.length) {
+      if (S.filterSource && S.hasMore && S.articles.length) {
+        var src = findSource(S.filterSource);
+        var srcLabel = src ? (src.emoji + " " + src.name) : "ce média";
+        pager.innerHTML =
+          '<div class="empty load-more-empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">' +
+          '<div class="big">📰</div><h2>Fin des articles chargés</h2>' +
+          '<p>Aucun article supplémentaire de <strong>' + esc(srcLabel) + '</strong> dans le lot actuel.</p>' +
+          '<button type="button" class="load-more-btn"' + (S.loadingMore ? " disabled" : "") + ">↓ " +
+          (S.loadingMore ? "Chargement…" : "Charger plus") + "</button></div>";
+        var btn = pager.querySelector(".load-more-btn");
+        if (btn) btn.addEventListener("click", requestLoadMore);
+        return;
+      }
       pager.innerHTML = !S.articles.length
         ? '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">📭</div><h2>Aucun article</h2><p>Les flux sont momentanément indisponibles.</p></div>'
         : '<div class="empty" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)"><div class="big">✓</div><h2>Vous êtes à jour</h2><p>Tous les articles ont été parcourus ou supprimés.</p></div>';
@@ -1327,7 +1397,7 @@
 
     var nextPill = next
       ? '<div class="next-pill"><span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(truncatePillTitle(next.title)) + '</span></div>'
-      : '<div class="next-pill at-end"><span>✓ Vous êtes à jour</span></div>';
+      : '<div class="next-pill' + (S.hasMore ? " load-more-pill" : " at-end") + '">' + endPillContent() + "</div>";
 
     var chapo = truncateChapo(fullChapo(a));
     var titleCls = String(a.title || "").trim().split(/\s+/).length <= 8 ? " title-short" : "";
@@ -1402,10 +1472,13 @@
     var next = S.feed[i + 1];
     if (next) {
       pill.classList.remove("at-end");
+      pill.classList.remove("load-more-pill");
       pill.innerHTML = '<span class="chev">⌃</span><span class="lbl">Suivant&nbsp;:</span><span class="nt">' + esc(truncatePillTitle(next.title)) + "</span>";
     } else {
-      pill.classList.add("at-end");
-      pill.innerHTML = "<span>✓ Vous êtes à jour</span>";
+      pill.classList.toggle("at-end", !S.hasMore);
+      pill.classList.toggle("load-more-pill", !!S.hasMore);
+      pill.innerHTML = endPillContent();
+      wireLoadMorePill(pill);
     }
   }
 
@@ -1452,9 +1525,12 @@
       if (on) { flashSave(i); toast("★ Ajouté à Mon Magazine"); } else { toast("Retiré de Mon Magazine"); }
       updatePageSaveBtn(i); syncReaderSaveState(a.id);
     });
-    page.querySelector(".next-pill").addEventListener("click", function () {
+    var pill = page.querySelector(".next-pill");
+    pill.addEventListener("click", function (e) {
+      if (e.target.closest(".load-more-btn")) return;
       var i = idxOf(page); if (i + 1 < S.feed.length) goToPage(i + 1);
     });
+    wireLoadMorePill(pill);
 
     var textwrap = page.querySelector(".page-textwrap");
     if (textwrap) {
@@ -1550,9 +1626,6 @@
     updateBackToTop();
     pager.scrollTo({ top: i * pager.clientHeight, behavior: "smooth" });
     loadAround(i);
-    if (S.hasMore && !S.loadingMore && i >= S.pageEls.length - 2) {
-      requestLoadMore();
-    }
   }
 
   pager.addEventListener("scroll", function () {
@@ -1560,9 +1633,6 @@
     if (i !== S.current) {
       resetAllTextwrapFlips();
       S.current = i; loadAround(i); updateBackToTop();
-    }
-    if (S.hasMore && !S.loadingMore && i >= S.pageEls.length - 2) {
-      requestLoadMore();
     }
     onContentScroll(pager.scrollTop);
   });
