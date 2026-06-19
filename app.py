@@ -112,47 +112,18 @@ Article :
 # ==============================
 
 FEED_PACKAGES = {
-    "geopolitique": {
-        "name": "Géopolitique",
-        "emoji": "🌍",
+    "affaires_globales": {
+        "name": "Affaires Globales",
+        "emoji": "🌐",
         "feeds": [
-            {"name": "Institut Montaigne", "emoji": "🏛️", "url": "https://www.institutmontaigne.org/rss.xml"},
+            {"name": "Geneva Solutions", "emoji": "🏔️", "url": "https://genevasolutions.news/articles.rss"},
+            {"name": "IRIS France", "emoji": "🏛️", "url": "https://www.iris-france.org/feed"},
+            {"name": "UN Affairs", "emoji": "🇺🇳", "url": "https://news.un.org/feed/subscribe/en/news/topic/un-affairs/feed/rss.xml"},
+            {"name": "Institut Montaigne", "emoji": "🎯", "url": "https://www.institutmontaigne.org/rss.xml"},
+            {"name": "UN Economic Development", "emoji": "📈", "url": "https://news.un.org/feed/subscribe/en/news/topic/economic-development/feed/rss.xml"},
+            {"name": "UN Climate", "emoji": "🌡️", "url": "https://news.un.org/feed/subscribe/en/news/topic/climate-change/feed/rss.xml"},
+            {"name": "Actualités GSI", "emoji": "🎓", "url": "https://www.unige.ch/gsi/rss/actualites"},
             {"name": "Telos", "emoji": "📚", "url": "https://www.telos-eu.com/fr/rss.xml"},
-            {"name": "Diploweb", "emoji": "🗺️", "url": "https://www.diploweb.com/spip.php?page=backend"},
-            {"name": "Les Yeux du Monde", "emoji": "👁", "url": "https://les-yeux-du-monde.fr/feed"},
-            {"name": "IRIS vidéos", "emoji": "🎬", "url": "https://www.iris-france.org/feed/"},
-            {"name": "Orient XXI", "emoji": "🕌", "url": "https://orientxxi.info/?page=backend&lang=fr"},
-            {"name": "Regards sur l'Est", "emoji": "🧭", "url": "https://regard-est.com/feed"},
-        ],
-    },
-    "litterature_philosophie": {
-        "name": "Littérature et Philosophie",
-        "emoji": "📖",
-        "feeds": [
-            {"name": "La Vie des idées", "emoji": "🧠", "url": "https://laviedesidees.fr/spip.php?page=backend"},
-            {"name": "Philomédia", "emoji": "💭", "url": "https://www.philomedia.be/feed/"},
-            {"name": "Acta Fabula", "emoji": "📜", "url": "https://www.fabula.org/lodel/acta/backend.php?format=rss092documents"},
-            {"name": "Actu-Philosophia", "emoji": "🤔", "url": "https://www.actu-philosophia.com/feed/"},
-        ],
-    },
-    "economie": {
-        "name": "Économie",
-        "emoji": "💶",
-        "feeds": [
-            {"name": "Institut Choiseul", "emoji": "💼", "url": "https://www.choiseul.info/feed"},
-            {"name": "CEPII / OFCE", "emoji": "📊", "url": "https://www.cepii.fr/CEPII/rss/RSSLettre.asp"},
-            {"name": "Observatoire des inégalités", "emoji": "⚖️", "url": "https://www.inegalites.fr/spip.php?page=backend"},
-            {"name": "Alternatives Économiques", "emoji": "📰", "url": "https://blogs.alternatives-economiques.fr/rss.xml"},
-        ],
-    },
-    "environnement_societe": {
-        "name": "Environnement et société",
-        "emoji": "🌱",
-        "feeds": [
-            {"name": "Terra Nova", "emoji": "🌍", "url": "https://tnova.fr/feed"},
-            {"name": "Institut Jean Jaurès", "emoji": "✊", "url": "https://www.jean-jaures.org/publication/feed/"},
-            {"name": "Baptiste Coulmont", "emoji": "📊", "url": "https://coulmont.com/feed/"},
-            {"name": "OpenEdition Lectures", "emoji": "📚", "url": "https://journals.openedition.org/lectures/backend?format=rssdocuments&idcontainer=171"},
         ],
     },
     "custom_feed": {
@@ -163,7 +134,7 @@ FEED_PACKAGES = {
     },
 }
 
-DEFAULT_ACTIVE_PACKAGES = ["geopolitique"]
+DEFAULT_ACTIVE_PACKAGES = ["affaires_globales"]
 MAX_ACTIVE_PACKAGES = 1
 
 NOTEBOOKLM_URL = "https://notebooklm.google.com"
@@ -794,7 +765,7 @@ def flipboard(articles, enrichments):
 # INTERFACE
 # ==============================
 
-st.set_page_config(page_title="Flipboard · News AI", layout="wide")
+st.set_page_config(page_title="Affaires Globales · UN", layout="wide")
 
 st.markdown(
     """
@@ -802,7 +773,7 @@ st.markdown(
     #MainMenu, header, footer {visibility: hidden;}
     [data-testid="stToolbar"] {display: none;}
     [data-testid="stDecoration"] {display: none;}
-    .stApp {background: #0e0e10;}
+    .stApp {background: #0a1628;}
     .block-container {padding: 0.3rem 0.5rem 0 0.5rem; max-width: 100%;}
     [data-testid="stAppViewBlockContainer"] {padding: 0.3rem 0.5rem 0 0.5rem;}
     iframe {border: none !important;}
